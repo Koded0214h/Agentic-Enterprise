@@ -9,13 +9,14 @@ https://docs.djangoproject.com/en/6.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
-
+import os
+from dotenv import load_dotenv
 from datetime import timedelta
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+load_dotenv()
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -34,6 +35,8 @@ ALLOWED_HOSTS = []
 INSTALLED_APPS = [
     'apps.agent_registry',
     'apps.agent_gateway',
+    'apps.policy_engine',
+    'apps.agent_intelligence',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -146,3 +149,8 @@ SIMPLE_JWT = {
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
 }
+
+
+# AI Environment Variables
+GEMINI_API_KEY=os.getenv('GEMINI_API_KEY')
+ANTHROPIC_API_KEY=os.getenv('ANTHROPIC_API_KEY')
