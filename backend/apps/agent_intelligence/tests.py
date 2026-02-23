@@ -49,3 +49,52 @@ class OrchestrationAndTraceTests(TestCase):
         
         self.assertEqual(TraceStep.objects.filter(conversation=conv).count(), 1)
         self.assertEqual(TraceStep.objects.first().node_name, "test_node")
+
+
+class SecurityAndHITLTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="security_user", password="pass")
+        self.agent = Agent.objects.create(
+            name="SecureAgent", owner=self.user, identity_key=str(uuid.uuid4())
+        )
+
+    def test_api_key_encryption(self):
+        """Test that LLMConfig API keys are encrypted in the database."""
+        raw_key = "sk-sensitive-12345"
+        config = LLMConfig.objects.create(
+            name="Encrypted Config",
+            provider="OPENAI",
+            model_name="gpt-4",
+            api_key=raw_key
+        )
+        
+        # Verify it's encrypted in the DB
+        config.refresh_from_db()
+        self.assertNotEqual(config.api_key, raw_key)
+        self.assertTrue(config.api_key.startswith("gAAAA")) # Fernet header
+        
+        # Verify it's decrypted via property
+        self.assertEqual(config.decrypted_api_key, raw_key)
+
+    def test_pending_action_flow(self):
+        """Test the lifecycle of a PendingAction."""
+        from .models import Conversation, PendingAction
+        conv = Conversation.objects.create(agent=self.agent, status="PENDING_APPROVAL")
+        pending = PendingAction.objects.create(
+            conversation=conv,
+            agent=self.agent,
+            action_type="task",
+            resource="agent:execute",
+            state_snapshot={"task": "do something"}
+        )
+        
+        self.assertEqual(pending.status, "PENDING")
+        
+        # Simulate approval via the ViewSet logic (simplified)
+        pending.status = "APPROVED"
+        pending.save()
+        conv.status = "ACTIVE"
+        conv.save()
+        
+        self.assertEqual(Conversation.objects.get(id=conv.id).status, "ACTIVE")
+        self.assertEqual(PendingAction.objects.get(id=pending.id).status, "APPROVED")

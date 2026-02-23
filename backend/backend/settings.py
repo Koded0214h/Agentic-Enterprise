@@ -150,6 +150,17 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Autonomous Agent Operating System (AOS) API',
+    'DESCRIPTION': 'Enterprise-grade backend for managing goal-driven agents, multi-agent orchestration, and usage-based billing.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    # Groups APIs by app for better organization in Swagger
+    'SCHEMA_PATH_PREFIX': '/api/',
+    'COMPONENT_SPLIT_PATCH': True,
+    'COMPONENT_SPLIT_REQUEST': True,
+}
+
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),

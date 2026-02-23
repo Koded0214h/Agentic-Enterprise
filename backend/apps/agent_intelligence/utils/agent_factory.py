@@ -268,7 +268,10 @@ class LangGraphAgentFactory:
         workflow.add_edge("tools", "agent")
 
         memory = MemorySaver()
-        app = workflow.compile(checkpointer=memory)
+        # For sensitive tools, we could interrupt here. 
+        # For now, let's allow policy escalation to handle the interruption in the view layer
+        # but the graph supports it if needed.
+        app = workflow.compile(checkpointer=memory, interrupt_before=["tools"])
         return app
 
     @classmethod

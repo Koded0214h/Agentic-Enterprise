@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import (
     LLMConfig, AgentCapability, Conversation, 
     Message, ToolDefinition, WorkflowTask,
-    TraceStep
+    TraceStep, PendingAction
 )
 from apps.agent_registry.serializers import AgentSerializer
 
@@ -64,6 +64,16 @@ class TraceStepSerializer(serializers.ModelSerializer):
     class Meta:
         model = TraceStep
         fields = '__all__'
+
+
+class PendingActionSerializer(serializers.ModelSerializer):
+    agent_name = serializers.CharField(source='agent.name', read_only=True)
+    conversation_title = serializers.CharField(source='conversation.title', read_only=True)
+    
+    class Meta:
+        model = PendingAction
+        fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'decided_at', 'decided_by']
 
 
 class AgentExecuteSerializer(serializers.Serializer):

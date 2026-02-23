@@ -64,6 +64,23 @@ class LLMConfig(models.Model):
     def __str__(self):
         return f"{self.get_provider_display()}: {self.model_name}"
 
+    def save(self, *args, **kwargs):
+        # Encrypt API key if it's not already encrypted (naive check)
+        if self.api_key and not self.api_key.startswith('gAAAA'): # Fernet tokens start with this
+            from .utils.security import SecurityManager
+            self.api_key = SecurityManager.encrypt(self.api_key)
+        super().save(*args, **kwargs)
+
+    @property
+    def decrypted_api_key(self):
+        if not self.api_key:
+            return ""
+        from .utils.security import SecurityManager
+        try:
+            return SecurityManager.decrypt(self.api_key)
+        except Exception:
+            return self.api_key # Fallback if not encrypted
+
 
 class AgentCapability(models.Model):
     """Capabilities and configurations assigned to specific agents"""
@@ -146,9 +163,11 @@ class Conversation(models.Model):
         max_length=20,
         choices=[
             ('ACTIVE', 'Active'),
+            ('PENDING_APPROVAL', 'Pending Approval'),
             ('COMPLETED', 'Completed'),
             ('ERROR', 'Error'),
             ('TIMEOUT', 'Timeout'),
+            ('FAILED', 'Failed'),
         ],
         default='ACTIVE'
     )
@@ -306,4 +325,41 @@ class TraceStep(models.Model):
 
     def __str__(self):
         return f"Trace {self.node_name} for {self.conversation.id}"
+
+
+class PendingAction(models.Model):
+    """Actions that are paused and waiting for human approval."""
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='pending_actions')
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
+    
+    action_type = models.CharField(max_length=50) # e.g., 'tool_call', 'execute'
+    resource = models.CharField(max_length=255)
+    
+    # The state to resume from
+    state_snapshot = models.JSONField(help_text="The LangGraph state at the time of interruption", null=True, blank=True)
+    
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('PENDING', 'Pending'),
+            ('APPROVED', 'Approved'),
+            ('DENIED', 'Denied'),
+            ('EXPIRED', 'Expired'),
+        ],
+        default='PENDING'
+    )
+    
+    reason = models.TextField(blank=True, help_text="Reason for escalation or denial")
+    decided_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Pending {self.action_type} for {self.agent.name}"
     

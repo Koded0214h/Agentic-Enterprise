@@ -8,13 +8,13 @@ from django.utils import timezone
 
 from .models import (
     LLMConfig, AgentCapability, Conversation,
-    Message, ToolDefinition, WorkflowTask, TraceStep
+    Message, ToolDefinition, WorkflowTask, TraceStep, PendingAction
 )
 from .serializers import (
     LLMConfigSerializer, AgentCapabilitySerializer,
     ConversationSerializer, MessageSerializer,
     ToolDefinitionSerializer, AgentExecuteSerializer,
-    WorkflowTaskSerializer, TraceStepSerializer
+    WorkflowTaskSerializer, TraceStepSerializer, PendingActionSerializer
 )
 from .utils.llm_manager import LLMManager
 from .utils.tool_registry import ToolRegistry
@@ -49,14 +49,14 @@ def _record_usage(agent, conversation, start_time):
 
 
 def _check_policy(agent, action: str, context: dict = None):
-    """Run the policy evaluator; return (decision, reason)."""
+    """Run the policy evaluator; return (decision, reason, policy)."""
     evaluator = PolicyEvaluator(agent)
-    decision, _policy, reason = evaluator.evaluate(
+    decision, policy, reason = evaluator.evaluate(
         resource="agent:execute",
         action=action,
         context=context or {},
     )
-    return decision, reason
+    return decision, reason, policy
 
 
 def _extract_reply(result: dict) -> str:
@@ -180,7 +180,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
         conversation = self.get_object()
         agent = conversation.agent
 
-        decision, reason = _check_policy(
+        decision, reason, policy = _check_policy(
             agent, "chat", {"conversation_id": str(conversation.id)}
         )
         if decision == "DENY":
@@ -188,8 +188,25 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 {"error": f"Policy denied: {reason}"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-
+        
         content = request.data.get("content", "").strip()
+
+        if decision == "ESCALATE":
+            # Pause execution and create PendingAction
+            PendingAction.objects.create(
+                conversation=conversation,
+                agent=agent,
+                action_type="chat",
+                resource="agent:execute",
+                reason=reason,
+                state_snapshot={"content": content} # Simplified for now
+            )
+            conversation.status = "PENDING_APPROVAL"
+            conversation.save()
+            return Response(
+                {"status": "PENDING_APPROVAL", "reason": reason},
+                status=status.HTTP_202_ACCEPTED
+            )
         if not content:
             return Response(
                 {"error": "Message content required"},
@@ -276,6 +293,68 @@ class WorkflowTaskViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Dependency task not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
+class PendingActionViewSet(viewsets.ModelViewSet):
+    """Review and approve/deny escalated agent actions."""
+    queryset = PendingAction.objects.all()
+    serializer_class = PendingActionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(agent__owner=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        pending = self.get_object()
+        if pending.status != 'PENDING':
+            return Response({'error': 'Action already decided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        decision = request.data.get('decision') # 'APPROVED' or 'DENIED'
+        if decision not in ['APPROVED', 'DENIED']:
+            return Response({'error': 'Invalid decision'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        pending.status = decision
+        pending.decided_by = request.user
+        pending.decided_at = timezone.now()
+        pending.save()
+        
+        conversation = pending.conversation
+        if decision == 'APPROVED':
+            conversation.status = 'ACTIVE'
+            conversation.save()
+            
+            # Resume execution
+            agent = pending.agent
+            capability = agent.capability
+            
+            # For MVP: Re-run the last message or task
+            # In a more advanced version, we'd resume from the exact LangGraph checkpoint
+            content = pending.state_snapshot.get('content') or pending.state_snapshot.get('task')
+            
+            start_time = time.time()
+            try:
+                executor = LangGraphAgentFactory.create_agent(agent)
+                state = _build_agent_state(agent, capability, conversation, content)
+                config = {"configurable": {"thread_id": str(conversation.id)}}
+                result = executor.invoke(state, config=config)
+                reply = _extract_reply(result)
+                _record_usage(agent, conversation, start_time)
+                
+                Message.objects.create(conversation=conversation, role="AGENT", content=reply)
+                conversation.status = "COMPLETED"
+                conversation.save()
+                
+                return Response({'status': 'Approved and executed', 'response': reply})
+            except Exception:
+                logger.exception("Resume execution failed")
+                conversation.status = "FAILED"
+                conversation.save()
+                return Response({'error': 'Failed to resume'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            conversation.status = 'FAILED'
+            conversation.save()
+            return Response({'status': 'Denied'})
+
+
 
 # ---------------------------------------------------------------------------
 # Direct execution view
@@ -308,7 +387,7 @@ class AgentExecuteView(views.APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        decision, reason = _check_policy(agent, "task", {"task_preview": task[:100]})
+        decision, reason, policy = _check_policy(agent, "task", {"task_preview": task[:100]})
         if decision == "DENY":
             return Response(
                 {"error": f"Policy denied: {reason}"},
@@ -325,11 +404,29 @@ class AgentExecuteView(views.APIView):
         conversation = Conversation.objects.create(
             agent=agent,
             title=f"Task: {task[:50]}",
-            status="ACTIVE",
+            status="PENDING_APPROVAL" if decision == "ESCALATE" else "ACTIVE",
             llm_config=capability.primary_llm,
         )
 
         Message.objects.create(conversation=conversation, role="USER", content=task)
+
+        if decision == "ESCALATE":
+            PendingAction.objects.create(
+                conversation=conversation,
+                agent=agent,
+                action_type="task",
+                resource="agent:execute",
+                reason=reason,
+                state_snapshot={"task": task}
+            )
+            return Response(
+                {
+                    "conversation_id": str(conversation.id),
+                    "status": "PENDING_APPROVAL",
+                    "reason": reason
+                },
+                status=status.HTTP_202_ACCEPTED
+            )
 
         start_time = time.time()
         try:

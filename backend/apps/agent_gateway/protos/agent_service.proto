@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package agent_service;
+
+service AgentOrchestrator {
+  rpc ExecuteTask (AgentRequest) returns (AgentResponse) {}
+}
+
+message AgentRequest {
+  string agent_id = 1;
+  string task = 2;
+  string context_json = 3;
+}
+
+message AgentResponse {
+  string conversation_id = 1;
+  string content = 2;
+  string status = 3;
+}

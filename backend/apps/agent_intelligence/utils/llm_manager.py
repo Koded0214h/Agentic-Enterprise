@@ -14,7 +14,7 @@ class LLMManager:
         """Return a LangChain chat model instance from an LLMConfig object."""
 
         provider = config.provider
-        api_key = config.api_key
+        api_key = config.decrypted_api_key
 
         if provider == "GEMINI":
             from langchain_google_genai import ChatGoogleGenerativeAI
