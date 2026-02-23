@@ -41,7 +41,7 @@ class LangGraphAgentFactory:
     def create_agent(cls, agent: Agent):
         """Main entry point to create an agent based on its capability type."""
         if not hasattr(agent, 'capability'):
-            return cls.create_react_agent(agent, None)
+            raise ValueError(f"Agent {agent.name} ({agent.id}) has no capability configuration.")
         
         cap = agent.capability
         if cap.graph_type == 'MULTI_AGENT':
@@ -95,8 +95,24 @@ class LangGraphAgentFactory:
             duration = time.time() - start_time
             duration_ms = int(duration * 1000)
             
+            from langchain_core.messages import AIMessage
+            
+            # Record Trace & Metrics
+            duration = time.time() - start_time
+            duration_ms = int(duration * 1000)
+            
             AGENT_EXECUTION_LATENCY.labels(agent_id=agent_id, agent_name=agent.name, node_name="supervisor").observe(duration)
             
+            # Record Usage for billing
+            from apps.billing.services import BillingService
+            BillingService.record_usage(
+                agent=agent,
+                resource_type="supervisor_turn",
+                resource_id=state.get("conversation_id"),
+                compute_time_ms=duration_ms,
+                cost=0.0005 # Higher cost for executive routing
+            )
+
             try:
                 TraceStep.objects.create(
                     conversation_id=state.get("conversation_id"),
@@ -108,7 +124,9 @@ class LangGraphAgentFactory:
             except Exception as e:
                 logger.error(f"Failed to record supervisor trace: {e}")
             
-            return {"next": response.next}
+            # Add decision to history so it's visible in logs
+            routing_msg = AIMessage(content=f"Routing task to specialized agent: {response.next}")
+            return {"next": response.next, "messages": [routing_msg]}
 
         # Create worker nodes
         workflow = StateGraph(AgentState)
@@ -215,6 +233,16 @@ class LangGraphAgentFactory:
             
             AGENT_EXECUTION_LATENCY.labels(agent_id=agent_id, agent_name=agent_name, node_name="agent").observe(duration)
             
+            # Record Usage for billing
+            from apps.billing.services import BillingService
+            BillingService.record_usage(
+                agent=agent,
+                resource_type="node_turn",
+                resource_id=conv_id,
+                compute_time_ms=duration_ms,
+                cost=0.0001 # Baseline cost per turn for functional agents
+            )
+
             # Simple loop detection
             is_loop = False
             if len(state["messages"]) > 0:

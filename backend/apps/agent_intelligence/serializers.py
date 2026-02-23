@@ -5,6 +5,7 @@ from .models import (
     TraceStep, PendingAction
 )
 from apps.agent_registry.serializers import AgentSerializer
+from apps.agent_registry.models import Agent
 
 
 class LLMConfigSerializer(serializers.ModelSerializer):
@@ -18,6 +19,13 @@ class AgentCapabilitySerializer(serializers.ModelSerializer):
     agent_name = serializers.CharField(source='agent.name', read_only=True)
     primary_llm_name = serializers.CharField(source='primary_llm.name', read_only=True)
     reasoning_llm_name = serializers.CharField(source='reasoning_llm.name', read_only=True)
+    sub_agent_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Agent.objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+        source='sub_agents'
+    )
     
     class Meta:
         model = AgentCapability

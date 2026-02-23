@@ -71,13 +71,39 @@ def _extract_reply(result: dict) -> str:
 
 _ROLE_MAP = {
     # DB values → LangChain-accepted role strings.
-    # LangChain rejects 'agent'; the correct canonical value is 'assistant'.
-    # Full accepted set: 'human'/'user', 'ai'/'assistant', 'system', 'tool'.
     "USER":   "user",
     "AGENT":  "assistant",
     "SYSTEM": "system",
     "TOOL":   "tool",
 }
+
+def _persist_history(conversation, result_messages):
+    """Save all new assistant/tool messages from the graph execution to the DB."""
+    # Get the count of existing messages to avoid duplicates
+    existing_count = conversation.messages.count()
+    
+    # New messages start after the existing ones
+    # Note: result_messages contains the FULL history (including user msg)
+    new_messages = result_messages[existing_count:]
+    
+    for msg in new_messages:
+        role = "AGENT"
+        if hasattr(msg, 'type'):
+            if msg.type == 'human': role = "USER"
+            elif msg.type == 'system': role = "SYSTEM"
+            elif msg.type == 'tool': role = "TOOL"
+        
+        content = msg.content if hasattr(msg, 'content') else str(msg)
+        if not content: continue # skip empty
+        
+        # Only save if it's not the user's initial message (which we saved manually)
+        # or if we want to be safe, just skip USER roles in persist
+        if role != "USER":
+            Message.objects.create(
+                conversation=conversation,
+                role=role,
+                content=content
+            )
 
 
 def _build_agent_state(agent, capability, conversation, content: str) -> dict:
@@ -239,6 +265,9 @@ class ConversationViewSet(viewsets.ModelViewSet):
             
             # Record usage
             _record_usage(agent, conversation, start_time)
+            
+            # Persist all intermediate messages
+            _persist_history(conversation, result["messages"])
         except Exception:
             logger.exception("Agent execution failed for conversation %s", conversation.id)
             return Response(
@@ -246,21 +275,12 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        agent_message = Message.objects.create(
-            conversation=conversation, role="AGENT", content=reply
-        )
-
         conversation.updated_at = timezone.now()
         conversation.save()
 
         return Response({
             "response": reply,
-            # Bug fix: UUID fields must be stringified — if left as UUID
-            # objects the test script receives a non-string value that, when
-            # embedded in a URL, produces a double-slash path like
-            # /conversations//message/ causing a 404.
             "conversation_id": str(conversation.id),
-            "message_id": str(agent_message.id),
         })
 
     @action(detail=True, methods=['get'])
@@ -339,7 +359,9 @@ class PendingActionViewSet(viewsets.ModelViewSet):
                 reply = _extract_reply(result)
                 _record_usage(agent, conversation, start_time)
                 
-                Message.objects.create(conversation=conversation, role="AGENT", content=reply)
+                # Persist all intermediate messages
+                _persist_history(conversation, result["messages"])
+                
                 conversation.status = "COMPLETED"
                 conversation.save()
                 
@@ -438,6 +460,9 @@ class AgentExecuteView(views.APIView):
             
             # Record usage
             _record_usage(agent, conversation, start_time)
+            
+            # Persist all intermediate messages
+            _persist_history(conversation, result["messages"])
         except Exception:
             logger.exception("Agent execution failed for agent %s", agent.id)
             conversation.status = "FAILED"
@@ -447,14 +472,13 @@ class AgentExecuteView(views.APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        Message.objects.create(conversation=conversation, role="AGENT", content=reply)
-
         conversation.status = "COMPLETED"
         conversation.save()
 
         return Response({
-            "conversation_id": str(conversation.id),  # stringified — see above
+            "conversation_id": str(conversation.id),
             "response": reply,
             "agent_id": str(agent.id),
             "agent_name": agent.name,
         })
+            

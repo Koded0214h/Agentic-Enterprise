@@ -28,6 +28,7 @@ class AgentSerializer(serializers.ModelSerializer):
             "name",
             "agent_type",
             "owner",
+            "department",
             "version",
             "identity_key",
             "roles",
