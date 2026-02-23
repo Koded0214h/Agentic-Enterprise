@@ -20,6 +20,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('', include('django_prometheus.urls')),
     path('api/registry/', include('apps.agent_registry.urls')),
     path('api/gateway/', include('apps.agent_gateway.urls')),
     path('api/policies/', include('apps.policy_engine.urls')),

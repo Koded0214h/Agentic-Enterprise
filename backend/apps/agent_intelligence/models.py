@@ -280,4 +280,30 @@ class WorkflowTask(models.Model):
 
     def __str__(self):
         return f"Task for {self.agent.name}: {self.description[:30]}"
+
+
+class TraceStep(models.Model):
+    """Logs individual steps within a LangGraph execution for visualization."""
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='traces')
+    
+    node_name = models.CharField(max_length=100)  # e.g., 'agent', 'tools', 'supervisor', 'Researcher'
+    input_data = models.JSONField(default=dict, blank=True)
+    output_data = models.JSONField(default=dict, blank=True)
+    
+    # Performance
+    duration_ms = models.IntegerField(default=0)
+    
+    # Anomaly Flags
+    is_loop = models.BooleanField(default=False)
+    risk_score = models.IntegerField(default=0)  # 0-100
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Trace {self.node_name} for {self.conversation.id}"
     

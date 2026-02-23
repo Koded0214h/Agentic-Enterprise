@@ -72,6 +72,13 @@ class LangGraphAgentFactory:
             next: str = Field(description=f"The next agent to call. Choose from {options}")
 
         def supervisor_node(state: AgentState) -> dict:
+            import time
+            from ..models import TraceStep
+            from .metrics import AGENT_EXECUTION_LATENCY
+            start_time = time.time()
+            
+            agent_id = state.get("agent_id")
+            
             system_prompt = (
                 f"You are a supervisor managing a conversation between the following workers: {[sa.name for sa in sub_agents]}.\n"
                 "Given the user request, respond with the worker to act next. Each worker will perform a task and respond with their results.\n"
@@ -83,6 +90,23 @@ class LangGraphAgentFactory:
             
             messages = [SystemMessage(content=system_prompt)] + state["messages"]
             response = structured_llm.invoke(messages)
+            
+            # Record Trace & Metrics
+            duration = time.time() - start_time
+            duration_ms = int(duration * 1000)
+            
+            AGENT_EXECUTION_LATENCY.labels(agent_id=agent_id, agent_name=agent.name, node_name="supervisor").observe(duration)
+            
+            try:
+                TraceStep.objects.create(
+                    conversation_id=state.get("conversation_id"),
+                    node_name="supervisor",
+                    input_data={"message_count": len(state["messages"])},
+                    output_data={"next": response.next},
+                    duration_ms=duration_ms
+                )
+            except Exception as e:
+                logger.error(f"Failed to record supervisor trace: {e}")
             
             return {"next": response.next}
 
@@ -154,12 +178,26 @@ class LangGraphAgentFactory:
         # Node: agent                                                          #
         # ------------------------------------------------------------------ #
         def agent_node(state: AgentState) -> dict:
+            import time
+            from ..models import TraceStep, Conversation
+            from .metrics import AGENT_TOKEN_USAGE, AGENT_EXECUTION_LATENCY, AGENT_ANOMALY_COUNTER
+            
+            start_time = time.time()
             iterations = state.get("iterations", 0)
             max_iterations = state.get("max_iterations", 10)
+            agent_id = state.get("agent_id")
+            
+            # Get agent info for metrics
+            agent_name = "unknown"
+            try:
+                agent = Agent.objects.get(id=agent_id)
+                agent_name = agent.name
+            except Agent.DoesNotExist:
+                pass
 
             if iterations >= max_iterations:
-                # Hard-stop: return a plain message so the graph can exit.
                 from langchain_core.messages import AIMessage
+                AGENT_ANOMALY_COUNTER.labels(agent_id=agent_id, anomaly_type="max_iterations").inc()
                 return {
                     "messages": [
                         AIMessage(content="Max iterations reached. Stopping.")
@@ -169,6 +207,33 @@ class LangGraphAgentFactory:
 
             messages = [SystemMessage(content=system_prompt)] + list(state["messages"])
             response = llm_with_tools.invoke(messages)
+            
+            # Record Trace & Metrics
+            duration = time.time() - start_time
+            duration_ms = int(duration * 1000)
+            conv_id = state.get("conversation_id")
+            
+            AGENT_EXECUTION_LATENCY.labels(agent_id=agent_id, agent_name=agent_name, node_name="agent").observe(duration)
+            
+            # Simple loop detection
+            is_loop = False
+            if len(state["messages"]) > 0:
+                last_msg = state["messages"][-1]
+                if hasattr(last_msg, 'content') and last_msg.content == response.content:
+                    is_loop = True
+                    AGENT_ANOMALY_COUNTER.labels(agent_id=agent_id, anomaly_type="loop").inc()
+
+            try:
+                TraceStep.objects.create(
+                    conversation_id=conv_id,
+                    node_name="agent",
+                    input_data={"message_count": len(messages)},
+                    output_data={"content": response.content[:200] if hasattr(response, 'content') else str(response)[:200]},
+                    duration_ms=duration_ms,
+                    is_loop=is_loop
+                )
+            except Exception as e:
+                logger.error(f"Failed to record trace step: {e}")
 
             return {
                 "messages": [response],

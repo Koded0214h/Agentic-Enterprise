@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from .models import (
     LLMConfig, AgentCapability, Conversation, 
-    Message, ToolDefinition, WorkflowTask
+    Message, ToolDefinition, WorkflowTask,
+    TraceStep
 )
 from apps.agent_registry.serializers import AgentSerializer
 
@@ -57,6 +58,12 @@ class WorkflowTaskSerializer(serializers.ModelSerializer):
         model = WorkflowTask
         fields = '__all__'
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class TraceStepSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TraceStep
+        fields = '__all__'
 
 
 class AgentExecuteSerializer(serializers.Serializer):

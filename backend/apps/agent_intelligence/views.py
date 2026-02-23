@@ -8,13 +8,13 @@ from django.utils import timezone
 
 from .models import (
     LLMConfig, AgentCapability, Conversation,
-    Message, ToolDefinition, WorkflowTask
+    Message, ToolDefinition, WorkflowTask, TraceStep
 )
 from .serializers import (
     LLMConfigSerializer, AgentCapabilitySerializer,
     ConversationSerializer, MessageSerializer,
     ToolDefinitionSerializer, AgentExecuteSerializer,
-    WorkflowTaskSerializer
+    WorkflowTaskSerializer, TraceStepSerializer
 )
 from .utils.llm_manager import LLMManager
 from .utils.tool_registry import ToolRegistry
@@ -245,6 +245,14 @@ class ConversationViewSet(viewsets.ModelViewSet):
             "conversation_id": str(conversation.id),
             "message_id": str(agent_message.id),
         })
+
+    @action(detail=True, methods=['get'])
+    def traces(self, request, pk=None):
+        """Get the execution trace for this conversation."""
+        conversation = self.get_object()
+        traces = conversation.traces.all()
+        serializer = TraceStepSerializer(traces, many=True)
+        return Response(serializer.data)
 
 
 class WorkflowTaskViewSet(viewsets.ModelViewSet):
