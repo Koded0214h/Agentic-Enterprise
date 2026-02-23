@@ -1,0 +1,8 @@
+Our Q4 2024 revenue was $12.5 million, up 23% year-over-year. 
+The AI Agents product line contributed $4.2 million.
+We have 47 enterprise customers using the platform.
+Next quarter we plan to launch RAG capabilities.
+The platform handles over 100,000 agent executions per day.
+Customer satisfaction score is 94%.
+Our main competitors are building similar features.
+We have 12 engineers working on the agent intelligence team.

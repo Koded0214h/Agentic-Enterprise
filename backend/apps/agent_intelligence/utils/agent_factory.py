@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 class AgentState(TypedDict):
     # add_messages merges incoming message lists instead of replacing them.
     messages: Annotated[list, add_messages]
+    next: str
     agent_id: str
     conversation_id: str
     iterations: int
@@ -34,7 +35,96 @@ class AgentState(TypedDict):
 # ---------------------------------------------------------------------------
 
 class LangGraphAgentFactory:
-    """Factory for creating LangGraph-based ReAct agents."""
+    """Factory for creating LangGraph-based agents."""
+
+    @classmethod
+    def create_agent(cls, agent: Agent):
+        """Main entry point to create an agent based on its capability type."""
+        if not hasattr(agent, 'capability'):
+            return cls.create_react_agent(agent, None)
+        
+        cap = agent.capability
+        if cap.graph_type == 'MULTI_AGENT':
+            return cls.create_supervisor_agent(agent, cap)
+        else:
+            return cls.create_react_agent(agent, cap)
+
+    @classmethod
+    def create_supervisor_agent(cls, agent: Agent, capability: AgentCapability):
+        """
+        Build a supervisor graph that delegates to sub-agents.
+        """
+        from langchain_core.messages import HumanMessage
+        from langchain_core.output_parsers.openai_functions import JsonOutputFunctionsParser
+        from pydantic import BaseModel, Field
+
+        sub_agents = capability.sub_agents.all()
+        if not sub_agents:
+            logger.warning(f"Supervisor agent {agent.name} has no sub-agents configured.")
+            return cls.create_react_agent(agent, capability)
+
+        options = ["FINISH"] + [sa.name for sa in sub_agents]
+        
+        # Define the supervisor logic
+        llm = LLMManager.get_llm(capability.primary_llm)
+
+        class RouteResponse(BaseModel):
+            next: str = Field(description=f"The next agent to call. Choose from {options}")
+
+        def supervisor_node(state: AgentState) -> dict:
+            system_prompt = (
+                f"You are a supervisor managing a conversation between the following workers: {[sa.name for sa in sub_agents]}.\n"
+                "Given the user request, respond with the worker to act next. Each worker will perform a task and respond with their results.\n"
+                "When finished, respond with FINISH."
+            )
+            
+            # Using function calling or structured output to ensure valid routing
+            structured_llm = llm.with_structured_output(RouteResponse)
+            
+            messages = [SystemMessage(content=system_prompt)] + state["messages"]
+            response = structured_llm.invoke(messages)
+            
+            return {"next": response.next}
+
+        # Create worker nodes
+        workflow = StateGraph(AgentState)
+        workflow.add_node("supervisor", supervisor_node)
+
+        for sa in sub_agents:
+            # Recursively create sub-agents
+            worker_app = cls.create_agent(sa)
+            
+            def create_worker_node(app, name):
+                def worker_node(state: AgentState) -> dict:
+                    result = app.invoke(state)
+                    # Get the last message from the worker
+                    last_msg = result["messages"][-1]
+                    # We need to make sure the message identifies which worker it came from
+                    last_msg.content = f"[{name}]: {last_msg.content}"
+                    return {"messages": [last_msg]}
+                return worker_node
+
+            workflow.add_node(sa.name, create_worker_node(worker_app, sa.name))
+
+        # Define edges
+        for sa in sub_agents:
+            # Workers always go back to supervisor
+            workflow.add_edge(sa.name, "supervisor")
+
+        # Conditional edges from supervisor
+        conditional_map = {name: name for name in [sa.name for sa in sub_agents]}
+        conditional_map["FINISH"] = END
+
+        workflow.add_conditional_edges(
+            "supervisor",
+            lambda state: state["next"],
+            conditional_map
+        )
+
+        workflow.add_edge(START, "supervisor")
+
+        memory = MemorySaver()
+        return workflow.compile(checkpointer=memory)
 
     @classmethod
     def create_react_agent(cls, agent: Agent, capability: AgentCapability):

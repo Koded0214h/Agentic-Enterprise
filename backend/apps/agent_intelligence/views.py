@@ -8,18 +8,21 @@ from django.utils import timezone
 
 from .models import (
     LLMConfig, AgentCapability, Conversation,
-    Message, ToolDefinition,
+    Message, ToolDefinition, WorkflowTask
 )
 from .serializers import (
     LLMConfigSerializer, AgentCapabilitySerializer,
     ConversationSerializer, MessageSerializer,
     ToolDefinitionSerializer, AgentExecuteSerializer,
+    WorkflowTaskSerializer
 )
 from .utils.llm_manager import LLMManager
 from .utils.tool_registry import ToolRegistry
 from .utils.agent_factory import LangGraphAgentFactory
 from apps.agent_registry.models import Agent
 from apps.policy_engine.utils import PolicyEvaluator
+from apps.billing.services import BillingService
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,23 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
+def _record_usage(agent, conversation, start_time):
+    """Calculate and record usage for a turn."""
+    duration_ms = int((time.time() - start_time) * 1000)
+    
+    # Basic token estimation if not provided by result (would be better to get from result)
+    # For now, we'll just record the compute time.
+    # A more advanced version would parse the LangGraph result for actual token usage.
+    
+    BillingService.record_usage(
+        agent=agent,
+        resource_type="conversation",
+        resource_id=conversation.id,
+        compute_time_ms=duration_ms,
+        cost=float(conversation.total_cost) # Use the cost calculated in models or updated during turn
+    )
+
 
 def _check_policy(agent, action: str, context: dict = None):
     """Run the policy evaluator; return (decision, reason)."""
@@ -188,8 +208,9 @@ class ConversationViewSet(viewsets.ModelViewSet):
         # the state we pass to _build_agent_state.
         Message.objects.create(conversation=conversation, role="USER", content=content)
 
+        start_time = time.time()
         try:
-            executor = LangGraphAgentFactory.create_react_agent(agent, capability)
+            executor = LangGraphAgentFactory.create_agent(agent)
             state = _build_agent_state(agent, capability, conversation, content)
             # MemorySaver requires thread_id in the configurable dict so it
             # knows which checkpoint stream to read/write.  Using conversation.id
@@ -198,6 +219,9 @@ class ConversationViewSet(viewsets.ModelViewSet):
             config = {"configurable": {"thread_id": str(conversation.id)}}
             result = executor.invoke(state, config=config)
             reply = _extract_reply(result)
+            
+            # Record usage
+            _record_usage(agent, conversation, start_time)
         except Exception:
             logger.exception("Agent execution failed for conversation %s", conversation.id)
             return Response(
@@ -221,6 +245,28 @@ class ConversationViewSet(viewsets.ModelViewSet):
             "conversation_id": str(conversation.id),
             "message_id": str(agent_message.id),
         })
+
+
+class WorkflowTaskViewSet(viewsets.ModelViewSet):
+    """Manage long-running agent tasks and dependencies."""
+    queryset = WorkflowTask.objects.all()
+    serializer_class = WorkflowTaskSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(agent__owner=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def add_dependency(self, request, pk=None):
+        task = self.get_object()
+        dep_id = request.data.get('dependency_id')
+        try:
+            dependency = WorkflowTask.objects.get(id=dep_id, agent__owner=request.user)
+            task.depends_on.add(dependency)
+            return Response({'status': 'dependency added'})
+        except WorkflowTask.DoesNotExist:
+            return Response({'error': 'Dependency task not found'}, status=status.HTTP_404_NOT_FOUND)
+
 
 
 # ---------------------------------------------------------------------------
@@ -277,12 +323,16 @@ class AgentExecuteView(views.APIView):
 
         Message.objects.create(conversation=conversation, role="USER", content=task)
 
+        start_time = time.time()
         try:
-            executor = LangGraphAgentFactory.create_react_agent(agent, capability)
+            executor = LangGraphAgentFactory.create_agent(agent)
             state = _build_agent_state(agent, capability, conversation, task)
             config = {"configurable": {"thread_id": str(conversation.id)}}
             result = executor.invoke(state, config=config)
             reply = _extract_reply(result)
+            
+            # Record usage
+            _record_usage(agent, conversation, start_time)
         except Exception:
             logger.exception("Agent execution failed for agent %s", agent.id)
             conversation.status = "FAILED"

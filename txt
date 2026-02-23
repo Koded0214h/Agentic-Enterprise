@@ -1,0 +1,31 @@
+1. Human-in-the-Loop (Policy Escalation)
+  While we have the ESCALATE policy effect, it doesn't do anything yet.
+   * Approval Queue: A model and API for "Pending Actions" where an agent pauses its state and waits for a human to click "Approve" via the UI or CLI.
+   * State Interruption: Modifying the LangGraph to support interrupt_before or interrupt_after on sensitive tool calls.
+
+
+  2. Observability & Traceability (The "X-Ray")
+  Currently, we have basic logs, but an enterprise needs to see why an agent made a decision.
+   * Trace Visualization: An API to return the full DAG execution path for a conversation.
+   * Anomaly Detection: Logic to flag when an agent is looping or performing high-risk actions outside its normal behavior.
+   * Metrics Exports: Integrating Prometheus endpoints to monitor real-time token burn and agent latency.
+
+
+  3. Production Infrastructure (Scaling)
+  We are currently running on SQLite and a synchronous setup for many views.
+   * PostgreSQL + pgvector: Migrating from ChromaDB/SQLite to a unified PostgreSQL instance with pgvector for better performance and scalability.
+   * Async Everything: Moving all LLM calls to background Celery tasks or asyncio to prevent blocking the web server during high-latency reasoning steps.
+   * Container orchestration: Adding Dockerfiles and a docker-compose.yml that includes Redis, Postgres, and Celery workers.
+
+
+  4. Advanced Security (The "Shield")
+   * Secret Management: Moving away from .env for agent identity keys and implementing a "Vault" or encrypted DB fields for third-party tool API keys.
+   * gRPC Gateway: Implementing the gRPC layer mentioned in the PRD for high-throughput internal communication between micro-agents.
+
+
+  5. Frontend (The "Face")
+   * The backend is now very capable, but it needs a management dashboard to:
+       * Register and configure agents.
+       * View billing/usage dashboards.
+       * Approve escalated policy requests.
+       * Monitor live agent conversations.

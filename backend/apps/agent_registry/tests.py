@@ -59,7 +59,7 @@ class AgentRegistryTests(APITestCase):
         # We can also filter by owner
         response = self.client.get(url, {"owner": self.user.id})
         self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]["name"], "Agent1")
+        self.assertEqual(response.data[0]["name"], agent1.name)
 
     def test_retrieve_agent_not_owner(self):
         other_user = User.objects.create_user(username="other", password="test")

@@ -55,6 +55,13 @@ class Agent(models.Model):
         related_name="agents",
         help_text=_("User who owns/created this agent")
     )
+    department = models.ForeignKey(
+        'billing.DepartmentCostCenter',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='agents'
+    )
     version = models.CharField(max_length=50, default="1.0.0")
     identity_key = models.CharField(
         max_length=255,

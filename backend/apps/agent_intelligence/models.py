@@ -114,6 +114,9 @@ class AgentCapability(models.Model):
     # Tools
     tools_enabled = models.JSONField(default=list)  # List of tool names this agent can use
     
+    # Multi-Agent
+    sub_agents = models.ManyToManyField(Agent, blank=True, related_name='supervisors')
+    
     # RAG Configuration
     rag_enabled = models.BooleanField(default=False)
     rag_collection = models.CharField(max_length=100, blank=True)
@@ -235,3 +238,46 @@ class ToolDefinition(models.Model):
     
     def __str__(self):
         return self.name
+    
+    
+class WorkflowTask(models.Model):
+    """Track long-running agent tasks and their dependencies."""
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='tasks')
+    description = models.TextField()
+    
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('PENDING', 'Pending'),
+            ('IN_PROGRESS', 'In Progress'),
+            ('COMPLETED', 'Completed'),
+            ('FAILED', 'Failed'),
+            ('BLOCKED', 'Blocked'),
+        ],
+        default='PENDING'
+    )
+    
+    # Dependencies
+    depends_on = models.ManyToManyField(
+        'self', 
+        symmetrical=False, 
+        blank=True, 
+        related_name='dependents'
+    )
+    
+    # Data
+    input_data = models.JSONField(default=dict, blank=True)
+    output_data = models.JSONField(default=dict, blank=True)
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Task for {self.agent.name}: {self.description[:30]}"
+    

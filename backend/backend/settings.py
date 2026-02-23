@@ -37,12 +37,15 @@ INSTALLED_APPS = [
     'apps.agent_gateway',
     'apps.policy_engine',
     'apps.agent_intelligence',
+    'apps.knowledge_base',
+    'apps.billing',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_celery_results',
 
     'rest_framework',
     'rest_framework_simplejwt',  # Add this
@@ -127,6 +130,10 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Media files (for uploaded documents)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -154,3 +161,14 @@ SIMPLE_JWT = {
 # AI Environment Variables
 GEMINI_API_KEY=os.getenv('GEMINI_API_KEY')
 ANTHROPIC_API_KEY=os.getenv('ANTHROPIC_API_KEY')
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+MISTRAL_API_KEY = os.environ.get('MISTRAL_API_KEY', '')
+
+# Vector store path
+VECTOR_STORE_PATH = os.path.join(BASE_DIR, 'chroma_db')
+
+# Celery (for async document processing)
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'django-db'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'

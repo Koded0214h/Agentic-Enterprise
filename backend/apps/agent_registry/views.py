@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend  # requires django-filter
 from .models import Agent, Role, AgentStatus
 from .serializers import AgentSerializer, RoleSerializer
+from apps.agent_intelligence.tasks import execute_agent_background
 
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
@@ -49,6 +50,18 @@ class AgentViewSet(viewsets.ModelViewSet):
         agent.status = AgentStatus.RUNNING
         agent.save()
         return Response({"status": "running"})
+
+    @action(detail=True, methods=["post"])
+    def execute(self, request, pk=None):
+        agent = self.get_object()
+        task_description = request.data.get("task")
+        if not task_description:
+            return Response({"error": "Task description required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Trigger Celery task
+        execute_agent_background.delay(str(agent.id), task_description)
+        
+        return Response({"status": "Task queued for background execution"})
 
 
 class RoleViewSet(viewsets.ModelViewSet):
