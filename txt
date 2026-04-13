@@ -1,31 +1,116 @@
-1. Human-in-the-Loop (Policy Escalation)
-  While we have the ESCALATE policy effect, it doesn't do anything yet.
-   * Approval Queue: A model and API for "Pending Actions" where an agent pauses its state and waits for a human to click "Approve" via the UI or CLI.
-   * State Interruption: Modifying the LangGraph to support interrupt_before or interrupt_after on sensitive tool calls.
+Here's a full breakdown of where your backend stands against the PRD and what's missing.
 
+  ---
+  Backend Completeness vs PRD: ~55-60%
 
-  2. Observability & Traceability (The "X-Ray")
-  Currently, we have basic logs, but an enterprise needs to see why an agent made a decision.
-   * Trace Visualization: An API to return the full DAG execution path for a conversation.
-   * Anomaly Detection: Logic to flag when an agent is looping or performing high-risk actions outside its normal behavior.
-   * Metrics Exports: Integrating Prometheus endpoints to monitor real-time token burn and agent latency.
+  What's Fully Working
 
+  ┌────────────────────────────────────────────────────────┬──────────┐
+  │                       Component                        │  Status  │
+  ├────────────────────────────────────────────────────────┼──────────┤
+  │ Agent Registry & Identity (identity_key, JWT sessions) │ ✅ Ready │
+  ├────────────────────────────────────────────────────────┼──────────┤
+  │ Agent Gateway (auth, request logging)                  │ ✅ Ready │
+  ├────────────────────────────────────────────────────────┼──────────┤
+  │ Policy Engine (rule eval, conditions, audit log)       │ ✅ Ready │
+  ├────────────────────────────────────────────────────────┼──────────┤
+  │ Agent Execution via LangGraph (ReAct + Supervisor)     │ ✅ Ready │
+  ├────────────────────────────────────────────────────────┼──────────┤
+  │ Knowledge Base / RAG (Chroma + Gemini embeddings)      │ ✅ Ready │
+  ├────────────────────────────────────────────────────────┼──────────┤
+  │ Usage Metering (token tracking, cost per LLM)          │ ✅ Ready │
+  ├────────────────────────────────────────────────────────┼──────────┤
+  │ Conversation + Message history                         │ ✅ Ready │
+  ├────────────────────────────────────────────────────────┼──────────┤
+  │ Prometheus metrics endpoint                            │ ✅ Ready │
+  └────────────────────────────────────────────────────────┴──────────┘
 
-  3. Production Infrastructure (Scaling)
-  We are currently running on SQLite and a synchronous setup for many views.
-   * PostgreSQL + pgvector: Migrating from ChromaDB/SQLite to a unified PostgreSQL instance with pgvector for better performance and scalability.
-   * Async Everything: Moving all LLM calls to background Celery tasks or asyncio to prevent blocking the web server during high-latency reasoning steps.
-   * Container orchestration: Adding Dockerfiles and a docker-compose.yml that includes Redis, Postgres, and Celery workers.
+  ---
+  What's Partial / Broken
 
+  ┌───────────────────────────┬────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────┐
+  │          Feature          │               What Works               │                                What's Missing                                 │
+  ├───────────────────────────┼────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+  │ RBAC                      │ Basic Role model with permission lists │ No fine-grained object-level permissions, no env isolation (dev/staging/prod) │
+  ├───────────────────────────┼────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+  │ Policy Escalation         │ PendingAction created                  │ Resumption after approval is incomplete — state snapshot not fully replayed   │
+  ├───────────────────────────┼────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+  │ Multi-Agent Orchestration │ Supervisor routes to workers           │ No DAG scheduler, no retry/fallback, no dynamic agent spawning                │
+  ├───────────────────────────┼────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+  │ Billing / Chargeback      │ UsageRecord tracks tokens + compute    │ Budget limits are not enforced (no hard blocks), no invoicing                 │
+  ├───────────────────────────┼────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+  │ Observability             │ TraceStep logs to DB                   │ No visualization UI, no real-time alerts, no distributed tracing              │
+  ├───────────────────────────┼────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+  │ gRPC                      │ .proto file + stub server exist        │ Not wired up, not production-ready                                            │
+  ├───────────────────────────┼────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+  │ Knowledge Base            │ Basic semantic search                  │ No hybrid search, no reranking, no streaming                                  │
+  └───────────────────────────┴────────────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────┘
 
-  4. Advanced Security (The "Shield")
-   * Secret Management: Moving away from .env for agent identity keys and implementing a "Vault" or encrypted DB fields for third-party tool API keys.
-   * gRPC Gateway: Implementing the gRPC layer mentioned in the PRD for high-throughput internal communication between micro-agents.
+  ---
+  What's Completely Missing
 
+  These are PRD requirements that have zero implementation:
 
-  5. Frontend (The "Face")
-   * The backend is now very capable, but it needs a management dashboard to:
-       * Register and configure agents.
-       * View billing/usage dashboards.
-       * Approve escalated policy requests.
-       * Monitor live agent conversations.
+  ┌─────────────────────────────────────────────────────────────┬───────────────┬───────────────────────────────────┐
+  │                       Missing Feature                       │  PRD Pillar   │             Severity              │
+  ├─────────────────────────────────────────────────────────────┼───────────────┼───────────────────────────────────┤
+  │ Compliance templates (HIPAA, SOX, PCI)                      │ Governance    │ Critical for target customers     │
+  ├─────────────────────────────────────────────────────────────┼───────────────┼───────────────────────────────────┤
+  │ Sensitive data tagging / DLP                                │ Governance    │ Critical for regulated industries │
+  ├─────────────────────────────────────────────────────────────┼───────────────┼───────────────────────────────────┤
+  │ SSO / OAuth / SAML                                          │ IAM           │ Critical for enterprise buyers    │
+  ├─────────────────────────────────────────────────────────────┼───────────────┼───────────────────────────────────┤
+  │ Budget enforcement (hard limits + alerts)                   │ Billing       │ High                              │
+  ├─────────────────────────────────────────────────────────────┼───────────────┼───────────────────────────────────┤
+  │ Environment isolation (dev/staging/prod per agent)          │ IAM           │ High                              │
+  ├─────────────────────────────────────────────────────────────┼───────────────┼───────────────────────────────────┤
+  │ Agent-to-agent trust policies                               │ IAM           │ High                              │
+  ├─────────────────────────────────────────────────────────────┼───────────────┼───────────────────────────────────┤
+  │ Workflow DAG scheduling (execute tasks in dependency order) │ Orchestration │ High                              │
+  ├─────────────────────────────────────────────────────────────┼───────────────┼───────────────────────────────────┤
+  │ Error recovery + automatic retry logic                      │ Orchestration │ High                              │
+  ├─────────────────────────────────────────────────────────────┼───────────────┼───────────────────────────────────┤
+  │ Grafana dashboards / alerting                               │ Observability │ Medium                            │
+  ├─────────────────────────────────────────────────────────────┼───────────────┼───────────────────────────────────┤
+  │ Streaming responses                                         │ Intelligence  │ Medium                            │
+  ├─────────────────────────────────────────────────────────────┼───────────────┼───────────────────────────────────┤
+  │ Payment integration (Stripe, ERP)                           │ Billing       │ Medium                            │
+  ├─────────────────────────────────────────────────────────────┼───────────────┼───────────────────────────────────┤
+  │ CI/CD pipeline, Helm charts, Secrets management             │ Infra         │ Medium                            │
+  ├─────────────────────────────────────────────────────────────┼───────────────┼───────────────────────────────────┤
+  │ Agent version control (beyond a version field)              │ Orchestration │ Low                               │
+  ├─────────────────────────────────────────────────────────────┼───────────────┼───────────────────────────────────┤
+  │ Anomaly detection (declared in metrics but never called)    │ Observability │ Low                               │
+  └─────────────────────────────────────────────────────────────┴───────────────┴───────────────────────────────────┘
+
+  ---
+  Can It Run a Full Company on Its Own?
+
+  No — not even close. Here's why:
+
+  This codebase is an infrastructure control plane for AI agents. It manages how agents are authorized, governed, and metered. It does not contain the actual business logic to run a company. What's missing entirely:
+
+  - No marketing module — no campaign automation, SEO agents, email workflows, social scheduling
+  - No sales module — no CRM, lead scoring, pipeline management, outreach agents
+  - No finance module — no accounting, AP/AR, payroll, financial reporting
+  - No HR module — no hiring workflows, onboarding, performance management
+  - No customer support — no ticket routing, escalation, resolution agents
+  - No product/engineering management — no sprint planning, bug triage, roadmap agents
+
+  What you do have is the operating layer that would govern and orchestrate such agents if they were built and registered. Think of it as Kubernetes — it can't run your app until you deploy your containers.
+
+  ---
+  Priority Fix List (to hit true MVP)
+
+  1. Complete ESCALATE workflow — full state snapshot + replay after human approval
+  2. Budget enforcement — block agent execution when current_spend >= monthly_limit
+  3. SSO integration — at minimum OAuth2 (Google/GitHub) for platform users
+  4. Environment isolation — add environment field to Agent model + policy scoping
+  5. Compliance policy templates — seed HIPAA/SOX/PCI starter policies via management command
+  6. Workflow DAG executor — Celery beat task that resolves depends_on and executes tasks in order
+  7. Streaming responses — wire up async_generator from LangGraph to SSE endpoint
+
+  The foundation is solid and well-structured. It needs about 2-3 more months of focused engineering to be truly enterprise-ready.
+
+✻ Worked for 3m 28s
+claude --resume 7367fb87-d07b-42a6-868a-bd34ef3ea7f6
