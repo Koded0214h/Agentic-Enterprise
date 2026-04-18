@@ -15,6 +15,19 @@ from apps.policy_engine.models import Policy, PolicyEffect
 
 DEFAULT_POLICIES = [
     {
+        "name": "Global Allow - Swarm Dispatch",
+        "description": (
+            "Default policy: allow any swarm agent to be dispatched through the "
+            "AOS bridge. Assign DENY policies with higher priority to block "
+            "specific agents, categories, or environments."
+        ),
+        "resources": ["swarm:execute", "swarm:execute:*"],
+        "effect": PolicyEffect.ALLOW,
+        "priority": 0,
+        "risk_level": 0,
+        "is_active": True,
+    },
+    {
         "name": "Global Allow - Agent Execution",
         "description": (
             "Default policy: allow any authenticated agent to call the execute "

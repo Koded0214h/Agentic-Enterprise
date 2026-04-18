@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'apps.agent_intelligence',
     'apps.knowledge_base',
     'apps.billing',
+    'apps.swarm_bridge',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',

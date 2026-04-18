@@ -34,6 +34,7 @@ urlpatterns = [
     path('api/intelligence/', include('apps.agent_intelligence.urls')),
     path('api/knowledge/', include('apps.knowledge_base.urls')),
     path('api/billing/', include('apps.billing.urls')),
+    path('api/swarm/', include('apps.swarm_bridge.urls')),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]

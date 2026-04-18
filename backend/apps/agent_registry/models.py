@@ -18,6 +18,11 @@ class AgentStatus(models.TextChoices):
     PAUSED = "PAUSED", _("Paused")
     ERRORED = "ERRORED", _("Errored")
 
+
+class AgentSource(models.TextChoices):
+    AOS = "AOS", _("AOS Native")
+    SWARM = "SWARM", _("Agent Swarm")
+
 class Role(models.Model):
     """
     Defines a set of permissions that can be assigned to agents.
@@ -73,6 +78,12 @@ class Agent(models.Model):
         max_length=20,
         choices=AgentStatus.choices,
         default=AgentStatus.RUNNING,
+    )
+    source = models.CharField(
+        max_length=10,
+        choices=AgentSource.choices,
+        default=AgentSource.AOS,
+        help_text=_("Origin of this agent: AOS-native or imported from Agent Swarm"),
     )
     metadata = models.JSONField(
         blank=True,
