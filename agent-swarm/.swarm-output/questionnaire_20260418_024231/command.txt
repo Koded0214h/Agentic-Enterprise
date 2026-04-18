@@ -1,0 +1,9 @@
+claude --system-prompt /Users/koded/Code/Agentic-Enterprise/agent-swarm/memory/_prompt_claude.md --print CONTEXT:
+Project at /Users/koded/Code/Agentic-Enterprise/agent-swarm. Be thorough about scope, users, data, auth, edge cases.
+
+TASK:
+Analyze this goal and produce clarifying questions:
+
+Research top 10 fintech enterprise prospects
+
+Project directory: /Users/koded/Code/Agentic-Enterprise/agent-swarm

@@ -1,0 +1,28 @@
+#!/usr/bin/env node
+
+import { spawn } from 'child_process';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const SWARM_ROOT = join(__dirname, '..');
+
+// Run the new TypeScript-based CLI
+const child = spawn('npx', ['tsx', join(SWARM_ROOT, 'src', 'main.tsx'), ...process.argv.slice(2)], {
+  cwd: process.cwd(),
+  stdio: 'inherit',
+  env: {
+    ...process.env,
+    SWARM_ROOT: SWARM_ROOT,
+  },
+});
+
+child.on('exit', (code) => {
+  process.exit(code || 0);
+});
+
+child.on('error', (err) => {
+  console.error(`Error: ${err.message}`);
+  process.exit(1);
+});
