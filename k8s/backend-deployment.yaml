@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aos-backend
+  namespace: aos
+  labels:
+    app: aos-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aos-backend
+  template:
+    metadata:
+      labels:
+        app: aos-backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: backend
+          image: aos-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: aos-config
+            - secretRef:
+                name: aos-secrets
+          command:
+            - sh
+            - -c
+            - |
+              python manage.py migrate --noinput
+              python manage.py default_policies
+              uvicorn backend.asgi:application --host 0.0.0.0 --port 8000 --workers 4
+          readinessProbe:
+            httpGet:
+              path: /api/docs/swagger/
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+          volumeMounts:
+            - name: chroma-storage
+              mountPath: /app/chroma_db
+            - name: media-storage
+              mountPath: /app/media
+      volumes:
+        - name: chroma-storage
+          persistentVolumeClaim:
+            claimName: aos-chroma-pvc
+        - name: media-storage
+          persistentVolumeClaim:
+            claimName: aos-media-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aos-backend
+  namespace: aos
+spec:
+  selector:
+    app: aos-backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aos-backend-hpa
+  namespace: aos
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aos-backend
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

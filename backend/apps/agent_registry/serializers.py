@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Agent, Role, AgentType, AgentStatus
+from .models import Agent, Role, AgentType, AgentStatus, AgentTrustPolicy
 
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -34,15 +34,30 @@ class AgentSerializer(serializers.ModelSerializer):
             "roles",
             "role_ids",
             "status",
+            "source",
+            "environment",
             "metadata",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "owner", "identity_key", "created_at", "updated_at"]
+        read_only_fields = ["id", "owner", "identity_key", "source", "created_at", "updated_at"]
 
     def create(self, validated_data):
-        # Identity is generated automatically, not from request data
         from .utils import generate_agent_identity
         identity = generate_agent_identity()
         validated_data["identity_key"] = identity["token"]
         return super().create(validated_data)
+
+
+class AgentTrustPolicySerializer(serializers.ModelSerializer):
+    source_agent_name = serializers.ReadOnlyField(source="source_agent.name")
+    target_agent_name = serializers.ReadOnlyField(source="target_agent.name")
+
+    class Meta:
+        model = AgentTrustPolicy
+        fields = [
+            "id", "source_agent", "source_agent_name",
+            "target_agent", "target_agent_name",
+            "allowed", "reason", "created_by", "created_at", "expires_at",
+        ]
+        read_only_fields = ["id", "created_by", "created_at"]

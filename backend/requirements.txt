@@ -1,3 +1,5 @@
+django-celery-beat==2.9.0
+django-cors-headers==4.9.0
 aiohappyeyeballs==2.6.1
 aiohttp==3.13.3
 aiosignal==1.4.0
