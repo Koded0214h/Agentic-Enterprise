@@ -1,0 +1,155 @@
+.dw-page { display: flex; flex-direction: column; gap: 18px; max-width: 600px; }
+
+.dw-shell { display: flex; flex-direction: column; gap: 28px; padding: 32px; }
+
+.dw-progress-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.dw-step-dot {
+  height: 4px;
+  flex: 1;
+  border-radius: 2px;
+  background: var(--border-2);
+  transition: background 0.3s;
+}
+.dw-step-dot.done { background: var(--accent); opacity: 0.5; }
+.dw-step-dot.active { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+.dw-step-content { display: flex; flex-direction: column; gap: 12px; }
+.dw-step-num { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+.dw-step-q { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; color: var(--text-h); }
+.dw-step-hint { font-size: 13px; color: var(--text); margin-top: -4px; }
+
+.dw-textarea {
+  width: 100%;
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  color: var(--text-h);
+  font-size: 14px;
+  font-family: var(--sans);
+  resize: vertical;
+  outline: none;
+  line-height: 1.55;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.dw-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.dw-textarea::placeholder { color: var(--text); }
+
+.dw-budget-wrap { display: flex; flex-direction: column; gap: 14px; }
+
+.dw-budget-display {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.dw-budget-val {
+  font-size: 48px;
+  font-weight: 800;
+  color: var(--text-h);
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+.dw-budget-label { font-size: 16px; color: var(--text); }
+
+.dw-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--border-2);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.dw-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-glow);
+  cursor: pointer;
+}
+
+.dw-budget-marks {
+  display: flex;
+  justify-content: space-between;
+}
+.dw-mark {
+  background: transparent;
+  border: 1px solid var(--border-2);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--sans);
+  transition: all 0.14s;
+}
+.dw-mark:hover { border-color: var(--accent-border); color: var(--accent); }
+.dw-mark.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+
+.dw-budget-note { font-size: 12px; color: var(--text); }
+
+.dw-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 4px;
+}
+
+/* ── Launching state ── */
+.dw-launching {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 0;
+  text-align: center;
+}
+
+.dw-launch-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--border-2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.dw-launching h2 { font-size: 20px; font-weight: 800; }
+.dw-launching > p { font-size: 13px; color: var(--text); }
+
+.dw-launch-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 280px;
+}
+.dw-launch-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0;
+  animation: fadeUp 0.4s ease both;
+}
+.dw-launch-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  animation: pulse 1.5s ease infinite;
+}

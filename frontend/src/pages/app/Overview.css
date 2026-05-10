@@ -1,0 +1,76 @@
+.overview { display: flex; flex-direction: column; gap: 18px; }
+
+.ov-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.ov-kpi { display: flex; flex-direction: column; gap: 6px; }
+.ov-kpi-label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text); }
+.ov-kpi-val { font-size: 30px; font-weight: 800; color: var(--text-h); letter-spacing: -0.04em; line-height: 1; }
+.ov-kpi-val span { font-size: 16px; color: var(--text); }
+.ov-kpi-trend { font-size: 12px; color: var(--text); }
+.ov-trend-up { color: var(--green); }
+
+.ov-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.ov-panel { display: flex; flex-direction: column; }
+.ov-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.ov-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.ov-agent-row:last-child { border-bottom: none; }
+.ov-agent-info { flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.ov-agent-name { font-size: 13px; font-weight: 600; color: var(--text-h); }
+.ov-agent-meta { font-size: 11px; color: var(--text); text-transform: capitalize; }
+.ov-loading { padding: 20px; font-size: 13px; color: var(--text); }
+.ov-agent-tasks { font-size: 12px; color: var(--text); }
+
+.ov-log-row {
+  display: grid;
+  grid-template-columns: 64px 120px 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.ov-log-row:last-child { border-bottom: none; }
+.ov-log-ts { color: var(--text); }
+.ov-log-agent { font-weight: 600; }
+.ov-log-msg { color: var(--text-2); }
+
+.ov-approval-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.ov-approval-row:last-child { border-bottom: none; }
+.ov-approval-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.ov-approval-agent { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.ov-approval-action { font-size: 13px; color: var(--text-h); font-weight: 500; }
+
+@media (max-width: 900px) {
+  .ov-kpis { grid-template-columns: 1fr 1fr; }
+  .ov-cols { grid-template-columns: 1fr; }
+}

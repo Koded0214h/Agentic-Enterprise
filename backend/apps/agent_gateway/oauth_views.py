@@ -183,6 +183,8 @@ class SAMLSSOView(APIView):
 
     POST /api/auth/sso/saml/
     Body: { "SAMLResponse": "<base64 assertion>" }
+
+    
     """
     permission_classes = [AllowAny]
 

@@ -1,16 +1,20 @@
 import uuid
 from datetime import timedelta
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 from django.conf import settings
 import jwt
 from apps.agent_registry.models import Agent
 from .models import AgentSession, AgentRequestLog
 from .serializers import AgentLoginSerializer, AgentSessionSerializer
 from .authentication import AgentAuthentication
+
+User = get_user_model()
 
 
 class AgentLoginView(APIView):
@@ -87,6 +91,66 @@ class AgentLogoutView(APIView):
             return Response({'message': 'Successfully logged out'})
         except (jwt.InvalidTokenError, AgentSession.DoesNotExist):
             return Response(
-                {'error': 'Invalid token'}, 
+                {'error': 'Invalid token'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+class UserRegisterView(APIView):
+    """Register a new human user and return simplejwt tokens."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        data = request.data
+        email = data.get('email', '').strip().lower()
+        password = data.get('password', '')
+        username = data.get('username', email)
+        first_name = data.get('first_name', '')
+        last_name = data.get('last_name', '')
+
+        if not email or not password:
+            return Response({'detail': 'Email and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if User.objects.filter(email=email).exists():
+            return Response({'email': ['A user with that email already exists.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(password) < 8:
+            return Response({'password': ['Password must be at least 8 characters.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name,
+        )
+
+        # Return simplejwt tokens so the frontend can log in immediately
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+            },
+        }, status=status.HTTP_201_CREATED)
+
+
+class UserMeView(APIView):
+    """Return the authenticated user's profile."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        return Response({
+            'id': user.id,
+            'email': user.email,
+            'username': user.username,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'is_staff': user.is_staff,
+        })

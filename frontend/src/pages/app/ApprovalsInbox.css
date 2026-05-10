@@ -1,0 +1,58 @@
+.inbox-page { display: flex; flex-direction: column; gap: 18px; }
+
+.inbox-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 60px 24px;
+  text-align: center;
+  color: var(--text);
+}
+.inbox-empty p { font-size: 15px; font-weight: 600; color: var(--text-2); }
+.inbox-empty span { font-size: 13px; }
+
+.inbox-list { display: flex; flex-direction: column; gap: 10px; }
+
+.inbox-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-decoration: none;
+  transition: border-color 0.18s, transform 0.15s;
+}
+.inbox-card:hover {
+  border-color: var(--accent-border);
+  transform: translateX(3px);
+}
+
+.inbox-card-left { flex-shrink: 0; }
+
+.inbox-risk-score {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+.inbox-risk-score[data-risk="high"] { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,92,122,0.3); }
+.inbox-risk-score[data-risk="medium"] { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(255,176,61,0.3); }
+.inbox-risk-score[data-risk="low"] { background: var(--green-dim); color: var(--green); border: 1px solid rgba(61,255,160,0.3); }
+
+.inbox-card-body { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+
+.inbox-card-top { display: flex; align-items: center; gap: 8px; }
+.inbox-agent { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+
+.inbox-action { font-size: 14px; color: var(--text-h); font-weight: 500; line-height: 1.4; }
+
+.inbox-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.inbox-policy { font-size: 11px; color: var(--text); flex: 1; }
+.inbox-time { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text); white-space: nowrap; }
+
+.inbox-arrow { color: var(--text); transition: color 0.14s, transform 0.14s; }
+.inbox-card:hover .inbox-arrow { color: var(--accent); transform: translateX(2px); }

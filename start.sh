@@ -10,11 +10,13 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="$REPO_ROOT/backend"
+FRONTEND_DIR="$REPO_ROOT/frontend"
 SWARM_DIR="$REPO_ROOT/agent-swarm"
 LOG_DIR="$REPO_ROOT/.logs"
 PID_FILE="$REPO_ROOT/.aos.pid"
 
 AOS_PORT=8000
+FRONTEND_PORT=5173
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -159,19 +161,51 @@ else
   echo "  Response: $POLICY_RESP"
 fi
 
-# ── 5. Summary ────────────────────────────────────────────────────────────────
+# ── 5. Frontend ────────────────────────────────────────────────────────────────
+info "Starting frontend on http://localhost:$FRONTEND_PORT ..."
+
+# Kill anything already on the frontend port
+lsof -ti tcp:$FRONTEND_PORT | xargs kill -9 2>/dev/null || true
+
+if [[ -d "$FRONTEND_DIR" && -f "$FRONTEND_DIR/package.json" ]]; then
+  # Install deps if node_modules is missing
+  if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
+    info "Installing frontend dependencies..."
+    (cd "$FRONTEND_DIR" && npm install --silent) || warn "npm install failed — frontend may not start"
+  fi
+
+  (cd "$FRONTEND_DIR" && npm run dev -- --port $FRONTEND_PORT \
+    > "$LOG_DIR/frontend.log" 2>&1) &
+  FRONTEND_PID=$!
+  echo "$FRONTEND_PID" >> "$PID_FILE"
+
+  # Wait for Vite to be ready
+  for i in {1..15}; do
+    if curl -s -o /dev/null http://localhost:$FRONTEND_PORT/ 2>/dev/null; then
+      success "Frontend is up (PID $FRONTEND_PID)"
+      break
+    fi
+    sleep 1
+    [[ $i == 15 ]] && warn "Frontend didn't respond in time — check $LOG_DIR/frontend.log"
+  done
+else
+  warn "No frontend directory found at $FRONTEND_DIR — skipping"
+fi
+
+# ── 6. Summary ────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════╗${RESET}"
 echo -e "${BOLD}║                  AOS is live                ║${RESET}"
 echo -e "${BOLD}╚══════════════════════════════════════════════╝${RESET}"
 echo ""
+echo -e "  ${GREEN}Frontend UI${RESET}       http://localhost:$FRONTEND_PORT"
 echo -e "  ${GREEN}Backend API${RESET}       http://localhost:$AOS_PORT"
 echo -e "  ${GREEN}Swagger UI${RESET}        http://localhost:$AOS_PORT/api/docs/swagger/"
 echo -e "  ${GREEN}Admin panel${RESET}       http://localhost:$AOS_PORT/admin/"
 echo -e "  ${GREEN}Metrics${RESET}           http://localhost:$AOS_PORT/metrics"
 echo -e "  ${GREEN}Swarm bridge${RESET}      http://localhost:$AOS_PORT/api/swarm/"
 echo ""
-echo -e "  ${CYAN}Logs${RESET}              $LOG_DIR/backend.log"
+echo -e "  ${CYAN}Logs${RESET}              $LOG_DIR/frontend.log  |  $LOG_DIR/backend.log"
 echo -e "  ${CYAN}Stop everything${RESET}   ./start.sh --stop"
 echo ""
 echo -e "  ${BOLD}To run a swarm agent:${RESET}"

@@ -1,0 +1,152 @@
+.apd-page { display: flex; flex-direction: column; gap: 18px; }
+
+.apd-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 14px;
+  align-items: start;
+}
+
+.apd-main { display: flex; flex-direction: column; gap: 14px; }
+.apd-sidebar { display: flex; flex-direction: column; gap: 12px; }
+
+/* ── Risk card ── */
+.apd-risk-card {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.apd-risk-high { border-color: rgba(255,92,122,0.4); background: rgba(255,92,122,0.04); }
+.apd-risk-medium { border-color: rgba(255,176,61,0.4); background: rgba(255,176,61,0.04); }
+.apd-risk-low { border-color: rgba(61,255,160,0.4); background: rgba(61,255,160,0.04); }
+
+.apd-risk-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  min-width: 70px;
+}
+.apd-risk-num {
+  font-size: 36px;
+  font-weight: 800;
+  color: var(--text-h);
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+.apd-risk-label { font-size: 11px; color: var(--text); }
+
+.apd-risk-body { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.apd-risk-body h2 { font-size: 17px; font-weight: 700; color: var(--text-h); line-height: 1.35; letter-spacing: -0.02em; }
+
+.apd-risk-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+.apd-risk-meta strong { color: var(--text-2); }
+
+.apd-policy-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  border-radius: 20px;
+  padding: 3px 10px;
+  width: fit-content;
+}
+
+/* ── Context ── */
+.apd-context-card { display: flex; flex-direction: column; gap: 14px; }
+.apd-context-card h3 { font-size: 14px; font-weight: 700; }
+
+.apd-conversation { display: flex; flex-direction: column; gap: 12px; }
+
+.apd-msg { display: flex; flex-direction: column; gap: 4px; }
+.apd-msg-role {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.apd-msg-user .apd-msg-role { color: var(--accent); }
+.apd-msg-system .apd-msg-role { color: var(--amber); }
+
+.apd-msg-content {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.55;
+  background: var(--bg-3);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  border-left: 3px solid var(--border-2);
+}
+.apd-msg-user .apd-msg-content { border-left-color: var(--accent-border); }
+.apd-msg-system .apd-msg-content { border-left-color: rgba(255,176,61,0.5); color: var(--amber); }
+
+/* ── Action card ── */
+.apd-action-card { display: flex; flex-direction: column; gap: 10px; }
+.apd-action-card h3 { font-size: 14px; font-weight: 700; }
+.apd-action-card > p { font-size: 12px; color: var(--text); line-height: 1.5; }
+
+/* ── State card ── */
+.apd-state-card { display: flex; flex-direction: column; gap: 10px; }
+.apd-state-card h3 { font-size: 14px; font-weight: 700; }
+.apd-state-card > p { font-size: 12px; color: var(--text); }
+
+.apd-state-json {
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--text-2);
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  padding: 12px;
+  white-space: pre;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+/* ── Outcome ── */
+.apd-outcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 48px 32px;
+  text-align: center;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.apd-outcome-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.apd-outcome-icon.approve { background: var(--green-dim); color: var(--green); border: 1px solid rgba(61,255,160,0.3); }
+.apd-outcome-icon.reject { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,92,122,0.3); }
+
+.apd-outcome h2 { font-size: 22px; font-weight: 800; }
+.apd-outcome p { font-size: 14px; color: var(--text); line-height: 1.6; }
+
+.apd-outcome-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+@media (max-width: 860px) {
+  .apd-layout { grid-template-columns: 1fr; }
+  .apd-sidebar { order: -1; }
+}

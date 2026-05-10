@@ -1,0 +1,316 @@
+.shell-layout {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+/* ── Sidebar ── */
+.shell-sidebar {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-2);
+  border-right: 1px solid var(--border);
+  transition: width 0.22s ease;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+  width: 216px;
+}
+.shell-sidebar.collapsed { width: 52px; }
+
+.shell-sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  height: 52px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.shell-logo {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--text-h);
+  text-decoration: none;
+}
+
+.shell-collapse {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.shell-collapse:hover { color: var(--text-h); }
+
+/* ── Nav ── */
+.shell-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  scrollbar-width: none;
+}
+.shell-nav::-webkit-scrollbar { display: none; }
+
+.shell-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.shell-nav-group:last-child { border-bottom: none; }
+
+.shell-nav-section {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text);
+  padding: 8px 8px 4px;
+  opacity: 0.6;
+}
+
+.shell-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  border-radius: 7px;
+  text-decoration: none;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.14s;
+  white-space: nowrap;
+  position: relative;
+}
+.shell-nav-item:hover {
+  background: var(--bg-3);
+  color: var(--text-h);
+}
+.shell-nav-item.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.shell-nav-icon {
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.shell-nav-label { flex: 1; }
+
+.shell-nav-badge {
+  background: var(--amber);
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+/* ── Footer ── */
+.shell-sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.shell-user {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  overflow: hidden;
+}
+
+.shell-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.shell-user-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.shell-user-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-h);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shell-user-role { font-size: 10px; color: var(--text); }
+
+.shell-logout {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+.shell-logout:hover { color: var(--red); }
+
+/* ── Main ── */
+.shell-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ── Topbar ── */
+.shell-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  height: 52px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex-shrink: 0;
+}
+
+.shell-topbar-left { display: flex; align-items: center; }
+.shell-topbar-right { display: flex; align-items: center; gap: 12px; }
+
+.shell-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--green-dim);
+  border: 1px solid rgba(61,255,160,0.2);
+  border-radius: 20px;
+  padding: 4px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--green);
+}
+
+.shell-bell {
+  position: relative;
+  color: var(--text);
+  padding: 6px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, background 0.15s;
+}
+.shell-bell:hover { color: var(--text-h); background: var(--bg-3); }
+
+.shell-bell-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: var(--red);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Content ── */
+.shell-content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+/* ── Breadcrumb ── */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+.breadcrumb-root {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.breadcrumb-link {
+  color: var(--text);
+  text-decoration: none;
+  transition: color 0.14s;
+}
+.breadcrumb-link:hover { color: var(--text-h); }
+.breadcrumb-sep { color: var(--border-2); padding: 0 2px; }
+.breadcrumb-current { color: var(--text-h); font-weight: 600; }
+
+/* ── Shared page styles ── */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+.page-header h1 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.page-header p {
+  font-size: 13px;
+  color: var(--text);
+  margin-top: 3px;
+}
+.page-header-left { display: flex; flex-direction: column; gap: 0; }
+.page-header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+@media (max-width: 900px) {
+  .shell-sidebar { width: 52px; }
+  .shell-nav-label,
+  .shell-nav-section,
+  .shell-nav-badge,
+  .shell-user-info { display: none; }
+  .shell-content { padding: 16px; }
+}
