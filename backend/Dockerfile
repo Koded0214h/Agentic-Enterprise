@@ -9,15 +9,16 @@ ENV PYTHONUNBUFFERED 1
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y 
-    build-essential 
-    libpq-dev 
-    git 
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
+# Install dependencies (CPU PyTorch first — avoids CUDA wheels inside slim images)
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu \
+ && pip install --no-cache-dir -r requirements.txt
 # Install additional production dependencies
 RUN pip install --no-cache-dir gunicorn psycopg2-binary django-prometheus
 

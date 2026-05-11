@@ -28,22 +28,47 @@ cd Agentic-Enterprise
 
 ## 2. Backend Setup
 
-### 2a. Create Python Virtual Environment
+### 2a. Automated bootstrap (recommended)
+
+From the repository root:
+
+```bash
+chmod +x backend/bootstrap-venv.sh   # once, if needed
+./backend/bootstrap-venv.sh
+```
+
+This creates `backend/.venv`, installs **CPU-only** PyTorch (`torch==2.6.0` from [download.pytorch.org/whl/cpu](https://download.pytorch.org/whl/cpu)) to avoid multi‑gigabyte CUDA wheels on laptops or disk‑constrained machines, then installs `requirements.txt`.
+
+For NVIDIA CUDA builds from PyPI instead:
+
+```bash
+TORCH_FLAVOR=cuda ./backend/bootstrap-venv.sh
+```
+
+### 2b. Manual venv (alternative)
 
 ```bash
 cd backend
 python3 -m venv .venv
-source .venv/bin/activate     # macOS/Linux
-# .venv\Scripts\activate      # Windows
 ```
 
-### 2b. Install Python Dependencies
+Install PyTorch **before** the rest so `sentence-transformers` does not pull the default CUDA stack:
 
 ```bash
-pip install -r requirements.txt
+# CPU (~recommended for dev / Python 3.13 / limited disk)
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
-> **Note:** `torch==2.2.2` is listed as a dependency for `sentence-transformers`. If you see a PyTorch version warning on startup, it is non-fatal — the system falls back to Gemini embeddings.
+CUDA (large download; requires enough disk space):
+
+```bash
+.venv/bin/python -m pip install torch==2.6.0
+.venv/bin/python -m pip install -r requirements.txt
+```
+
+Always use `.venv/bin/python -m pip` (or `source .venv/bin/activate` first) so dependencies do not install into Conda/base Python.
 
 ### 2c. Configure Environment Variables
 
