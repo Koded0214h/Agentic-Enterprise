@@ -51,7 +51,7 @@ class SwarmPolicyCheckSerializer(serializers.Serializer):
 
 class PolicyCheckResponseSerializer(serializers.Serializer):
     """Response body for POST /api/swarm/policy/check/"""
-    decision = serializers.ChoiceField(choices=["allow", "deny", "escalate"])
+    decision = serializers.ChoiceField(choices=["allow", "deny", "audit", "escalate", "throttle"])
     reason = serializers.CharField()
     policy_id = serializers.UUIDField(allow_null=True)
     pending_action_id = serializers.UUIDField(

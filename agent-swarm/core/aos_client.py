@@ -78,6 +78,9 @@ def new_execution_id() -> str:
     return str(uuid.uuid4())
 
 
+_MAX_THROTTLE_RETRIES = 3
+
+
 def policy_check(
     execution_id: str,
     agent_name: str,
@@ -85,12 +88,17 @@ def policy_check(
     engine: str = "claude",
     workflow_phase: Optional[str] = None,
     context: Optional[dict] = None,
+    _retries: int = 0,
 ) -> dict:
     """
     Pre-execution policy gate.
 
     Returns the AOS response dict, or {"decision": "allow"} when AOS is
     disabled or unreachable (fail-open — the swarm must not block on AOS).
+
+    On a "throttle" decision AOS returns retry_after_seconds. This function
+    sleeps for that duration and retries up to _MAX_THROTTLE_RETRIES times
+    before converting the throttle into a hard deny.
     """
     if not ENABLED:
         return {"decision": "allow"}
@@ -113,6 +121,22 @@ def policy_check(
 
     decision = result.get("decision", "allow")
     reason = result.get("reason", "")
+
+    if decision == "throttle":
+        retry_after = int(result.get("retry_after_seconds", 30))
+        if _retries < _MAX_THROTTLE_RETRIES:
+            print(
+                f"  [AOS] Throttled — retrying in {retry_after}s "
+                f"(attempt {_retries + 1}/{_MAX_THROTTLE_RETRIES})"
+            )
+            time.sleep(retry_after)
+            return policy_check(
+                execution_id, agent_name, task, engine,
+                workflow_phase, context, _retries=_retries + 1,
+            )
+        print("  [AOS] Throttle max retries exceeded — converting to deny")
+        return {"decision": "deny", "reason": "Throttle max retries exceeded"}
+
     if decision != "allow":
         print(f"  [AOS] Policy decision: {decision.upper()} — {reason}")
     return result
