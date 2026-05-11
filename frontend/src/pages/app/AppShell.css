@@ -257,6 +257,30 @@
   justify-content: center;
 }
 
+/* ── Run Swarm button ── */
+.shell-run-swarm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(170, 59, 255, 0.45);
+  background: rgba(170, 59, 255, 0.12);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.12s;
+  white-space: nowrap;
+}
+
+.shell-run-swarm:hover {
+  background: rgba(170, 59, 255, 0.22);
+  border-color: rgba(170, 59, 255, 0.7);
+  transform: translateY(-1px);
+}
+
 /* ── Content ── */
 .shell-content {
   flex: 1;

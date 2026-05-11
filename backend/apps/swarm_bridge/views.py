@@ -9,10 +9,17 @@ Five integration endpoints that form the AOS↔Swarm contract:
   4. POST /api/swarm/traces/            — emit trace events
   5. GET  /api/swarm/kb/query/          — enrich context from knowledge base
 """
+import json
+import os
+import re
+import subprocess
+import sys
 import uuid
 import secrets
 from decimal import Decimal
+from pathlib import Path
 
+from django.http import StreamingHttpResponse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -425,3 +432,75 @@ class SwarmExecutionContextDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(SwarmExecutionContextSerializer(ctx).data)
+
+
+_ANSI_RE = re.compile(r'\x1b\[[0-9;]*[mGKHF]')
+
+# agent-swarm lives two levels above backend/
+_SWARM_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "agent-swarm"
+
+
+class SwarmRunView(APIView):
+    """
+    POST /api/swarm/run/
+
+    Launch an orchestrator run and stream output line-by-line via SSE.
+
+    Body:
+        { "goal": "Build a B2B SaaS for X", "engine": "claude" }
+
+    Events:
+        data: {"type": "line",  "content": "..."}
+        data: {"type": "done",  "exit_code": 0}
+        data: {"type": "error", "detail": "..."}
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        goal = (request.data.get("goal") or "").strip()
+        engine = (request.data.get("engine") or "claude").strip()
+
+        if not goal:
+            return Response({"error": "goal is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        orchestrator = _SWARM_ROOT / "orchestrator.py"
+        if not orchestrator.exists():
+            return Response(
+                {"error": f"Orchestrator not found at {orchestrator}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        # Build env — inherit current env, overlay swarm .env if present
+        env = os.environ.copy()
+        env_file = _SWARM_ROOT / ".env"
+        if env_file.exists():
+            for raw in env_file.read_text().splitlines():
+                raw = raw.strip()
+                if raw and not raw.startswith("#") and "=" in raw:
+                    k, v = raw.split("=", 1)
+                    env[k.strip()] = v.strip()
+
+        def _stream():
+            try:
+                proc = subprocess.Popen(
+                    [sys.executable, str(orchestrator), goal, "--engine", engine],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    cwd=str(_SWARM_ROOT),
+                    env=env,
+                )
+                for raw_line in proc.stdout:
+                    clean = _ANSI_RE.sub("", raw_line).rstrip()
+                    if clean:
+                        yield f"data: {json.dumps({'type': 'line', 'content': clean})}\n\n"
+                proc.wait()
+                yield f"data: {json.dumps({'type': 'done', 'exit_code': proc.returncode})}\n\n"
+            except Exception as exc:
+                yield f"data: {json.dumps({'type': 'error', 'detail': str(exc)})}\n\n"
+
+        response = StreamingHttpResponse(_stream(), content_type="text/event-stream")
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response

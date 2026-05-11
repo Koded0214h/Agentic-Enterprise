@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
 import {
   RiDashboardLine, RiRobot2Line, RiFlowChart, RiShieldCheckLine,
-  RiWalletLine, RiShutDownLine, RiBellLine,
+  RiWalletLine, RiShutDownLine, RiBellLine, RiRocketLine,
   RiLayoutGridLine, RiEyeLine, RiSettings3Line, RiShieldLine,
   RiTeamLine,
 } from 'react-icons/ri'
 import { useAuth } from '../../context/AuthContext'
 import { agents as agentsAPI } from '../../api/agents'
+import SwarmRunDrawer from '../../components/SwarmRunDrawer'
 import './AppShell.css'
 
 function buildNav(pendingCount) {
@@ -48,6 +49,7 @@ export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
   const [activeCount, setActiveCount] = useState(0)
+  const [swarmOpen, setSwarmOpen] = useState(false)
   const { user, logout } = useAuth()
   const location = useLocation()
 
@@ -132,6 +134,15 @@ export default function AppShell() {
               <RiBellLine size={18} />
               {pendingCount > 0 && <span className="shell-bell-badge">{pendingCount}</span>}
             </Link>
+            <button
+              className="shell-run-swarm"
+              onClick={() => setSwarmOpen(true)}
+              aria-label="Run swarm"
+              title="Run Swarm"
+            >
+              <RiRocketLine size={15} />
+              <span>Run Swarm</span>
+            </button>
           </div>
         </header>
 
@@ -139,6 +150,8 @@ export default function AppShell() {
           <Outlet />
         </main>
       </div>
+
+      <SwarmRunDrawer open={swarmOpen} onClose={() => setSwarmOpen(false)} />
     </div>
   )
 }

@@ -6,6 +6,7 @@ from .views import (
     SwarmTraceEventView,
     SwarmKBQueryView,
     SwarmExecutionContextDetailView,
+    SwarmRunView,
 )
 
 urlpatterns = [
@@ -30,4 +31,7 @@ urlpatterns = [
         SwarmExecutionContextDetailView.as_view(),
         name="swarm-execution-detail",
     ),
+
+    # Launch a swarm run and stream output via SSE
+    path("run/", SwarmRunView.as_view(), name="swarm-run"),
 ]
