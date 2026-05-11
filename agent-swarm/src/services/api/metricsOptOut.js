@@ -1,0 +1,208 @@
+"use strict";
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
+    return g.next = verb(0), g["throw"] = verb(1), g["return"] = verb(2), typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (g && (g = 0, op[0] && (_ = 0)), _) try {
+            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [op[0] & 2, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports._clearMetricsEnabledCacheForTesting = void 0;
+exports.checkMetricsEnabled = checkMetricsEnabled;
+var axios_1 = require("axios");
+var auth_js_1 = require("../../utils/auth.js");
+var config_js_1 = require("../../utils/config.js");
+var debug_js_1 = require("../../utils/debug.js");
+var errors_js_1 = require("../../utils/errors.js");
+var http_js_1 = require("../../utils/http.js");
+var log_js_1 = require("../../utils/log.js");
+var memoize_js_1 = require("../../utils/memoize.js");
+var privacyLevel_js_1 = require("../../utils/privacyLevel.js");
+var userAgent_js_1 = require("../../utils/userAgent.js");
+// In-memory TTL — dedupes calls within a single process
+var CACHE_TTL_MS = 60 * 60 * 1000;
+// Disk TTL — org settings rarely change. When disk cache is fresher than this,
+// we skip the network entirely (no background refresh). This is what collapses
+// N `claude -p` invocations into ~1 API call/day.
+var DISK_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * Internal function to call the API and check if metrics are enabled
+ * This is wrapped by memoizeWithTTLAsync to add caching behavior
+ */
+function _fetchMetricsEnabled() {
+    return __awaiter(this, void 0, void 0, function () {
+        var authResult, headers, endpoint, response;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    authResult = (0, http_js_1.getAuthHeaders)();
+                    if (authResult.error) {
+                        throw new Error("Auth error: ".concat(authResult.error));
+                    }
+                    headers = __assign({ 'Content-Type': 'application/json', 'User-Agent': (0, userAgent_js_1.getClaudeCodeUserAgent)() }, authResult.headers);
+                    endpoint = "https://api.anthropic.com/api/claude_code/organizations/metrics_enabled";
+                    return [4 /*yield*/, axios_1.default.get(endpoint, {
+                            headers: headers,
+                            timeout: 5000,
+                        })];
+                case 1:
+                    response = _a.sent();
+                    return [2 /*return*/, response.data];
+            }
+        });
+    });
+}
+function _checkMetricsEnabledAPI() {
+    return __awaiter(this, void 0, void 0, function () {
+        var data, error_1;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    // Incident kill switch: skip the network call when nonessential traffic is disabled.
+                    // Returning enabled:false sheds load at the consumer (bigqueryExporter skips
+                    // export). Matches the non-subscriber early-return shape below.
+                    if ((0, privacyLevel_js_1.isEssentialTrafficOnly)()) {
+                        return [2 /*return*/, { enabled: false, hasError: false }];
+                    }
+                    _a.label = 1;
+                case 1:
+                    _a.trys.push([1, 3, , 4]);
+                    return [4 /*yield*/, (0, http_js_1.withOAuth401Retry)(_fetchMetricsEnabled, {
+                            also403Revoked: true,
+                        })];
+                case 2:
+                    data = _a.sent();
+                    (0, debug_js_1.logForDebugging)("Metrics opt-out API response: enabled=".concat(data.metrics_logging_enabled));
+                    return [2 /*return*/, {
+                            enabled: data.metrics_logging_enabled,
+                            hasError: false,
+                        }];
+                case 3:
+                    error_1 = _a.sent();
+                    (0, debug_js_1.logForDebugging)("Failed to check metrics opt-out status: ".concat((0, errors_js_1.errorMessage)(error_1)));
+                    (0, log_js_1.logError)(error_1);
+                    return [2 /*return*/, { enabled: false, hasError: true }];
+                case 4: return [2 /*return*/];
+            }
+        });
+    });
+}
+// Create memoized version with custom error handling
+var memoizedCheckMetrics = (0, memoize_js_1.memoizeWithTTLAsync)(_checkMetricsEnabledAPI, CACHE_TTL_MS);
+/**
+ * Fetch (in-memory memoized) and persist to disk on change.
+ * Errors are not persisted — a transient failure should not overwrite a
+ * known-good disk value.
+ */
+function refreshMetricsStatus() {
+    return __awaiter(this, void 0, void 0, function () {
+        var result, cached, unchanged;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4 /*yield*/, memoizedCheckMetrics()];
+                case 1:
+                    result = _a.sent();
+                    if (result.hasError) {
+                        return [2 /*return*/, result];
+                    }
+                    cached = (0, config_js_1.getGlobalConfig)().metricsStatusCache;
+                    unchanged = cached !== undefined && cached.enabled === result.enabled;
+                    // Skip write when unchanged AND timestamp still fresh — avoids config churn
+                    // when concurrent callers race past a stale disk entry and all try to write.
+                    if (unchanged && Date.now() - cached.timestamp < DISK_CACHE_TTL_MS) {
+                        return [2 /*return*/, result];
+                    }
+                    (0, config_js_1.saveGlobalConfig)(function (current) { return (__assign(__assign({}, current), { metricsStatusCache: {
+                            enabled: result.enabled,
+                            timestamp: Date.now(),
+                        } })); });
+                    return [2 /*return*/, result];
+            }
+        });
+    });
+}
+/**
+ * Check if metrics are enabled for the current organization.
+ *
+ * Two-tier cache:
+ * - Disk (24h TTL): survives process restarts. Fresh disk cache → zero network.
+ * - In-memory (1h TTL): dedupes the background refresh within a process.
+ *
+ * The caller (bigqueryExporter) tolerates stale reads — a missed export or
+ * an extra one during the 24h window is acceptable.
+ */
+function checkMetricsEnabled() {
+    return __awaiter(this, void 0, void 0, function () {
+        var cached;
+        return __generator(this, function (_a) {
+            // Service key OAuth sessions lack user:profile scope → would 403.
+            // API key users (non-subscribers) fall through and use x-api-key auth.
+            // This check runs before the disk read so we never persist auth-state-derived
+            // answers — only real API responses go to disk. Otherwise a service-key
+            // session would poison the cache for a later full-OAuth session.
+            if ((0, auth_js_1.isClaudeAISubscriber)() && !(0, auth_js_1.hasProfileScope)()) {
+                return [2 /*return*/, { enabled: false, hasError: false }];
+            }
+            cached = (0, config_js_1.getGlobalConfig)().metricsStatusCache;
+            if (cached) {
+                if (Date.now() - cached.timestamp > DISK_CACHE_TTL_MS) {
+                    // saveGlobalConfig's fallback path (config.ts:731) can throw if both
+                    // locked and fallback writes fail — catch here so fire-and-forget
+                    // doesn't become an unhandled rejection.
+                    void refreshMetricsStatus().catch(log_js_1.logError);
+                }
+                return [2 /*return*/, {
+                        enabled: cached.enabled,
+                        hasError: false,
+                    }];
+            }
+            // First-ever run on this machine: block on the network to populate disk.
+            return [2 /*return*/, refreshMetricsStatus()];
+        });
+    });
+}
+// Export for testing purposes only
+var _clearMetricsEnabledCacheForTesting = function () {
+    memoizedCheckMetrics.cache.clear();
+};
+exports._clearMetricsEnabledCacheForTesting = _clearMetricsEnabledCacheForTesting;

@@ -1,641 +1,189 @@
 #!/usr/bin/env python3
 """
-Agent Swarm Orchestrator
-Engine-agnostic multi-agent task execution.
+Agent Swarm Orchestrator — cross-version launcher.
 
-Works with ANY CLI agent that accepts a prompt.
-Add your own engine with 5 lines of code.
+Loads the pre-compiled Python 3.13 bytecode when running under Python 3.13.
+For any other Python 3.x, compiles and runs the bundled snapshot source so
+users on Python 3.12 (the most common version) are not left with a segfault.
 
-Usage:
-  python orchestrator.py "Build a landing page"
-  python orchestrator.py --engine gemini "Create an API"
-  python orchestrator.py --engine generic --command "my-agent" --system-flag "--role" "Do something"
-  python orchestrator.py --list-engines
-  python orchestrator.py --list-agents
+When no goal is given on the CLI, both paths show an interactive TUI prompt.
 """
+from __future__ import annotations
 
-import os
-import json
+import importlib.util
+import marshal
 import sys
-import shutil
-import argparse
-import concurrent.futures
-from datetime import datetime
 from pathlib import Path
-from time import monotonic
 
-# Add engines to path
-sys.path.insert(0, str(Path(__file__).parent))
-from engines.adapter import (
-    get_engine, register_engine, list_engines, detect_available_engine, detect_all_available, GenericEngine, BaseEngine
+_pkg = Path(__file__).resolve().parent
+if str(_pkg) not in sys.path:
+    sys.path.insert(0, str(_pkg))
+
+_PYC_CANDIDATES = (
+    _pkg / "recovery" / "orchestrator.cpython-313.pyc",
+    _pkg / "__pycache__" / "orchestrator.cpython-313.pyc",
 )
-from core.workspace import Workspace, WorkspaceManager
-from core.command_executor import CommandExecutor, CommandSafety
-from core.self_healer import SelfHealer, HealingStrategy
-from core.tui import TUI, Spinner, Colors as C
-from core import aos_client
 
-# Paths
-SWARM_ROOT = Path(__file__).parent
-AGENTS_DIR = SWARM_ROOT / "agents"
-MEMORY_DIR = SWARM_ROOT / "memory"
-OUTPUT_DIR = SWARM_ROOT / "output"
-CONFIG_FILE = SWARM_ROOT / "swarm.config.json"
+_SNAPSHOT = _pkg / "recovery" / "orchestrator.github_560.snapshot.py"
 
-# Ensure directories exist
-MEMORY_DIR.mkdir(exist_ok=True)
-OUTPUT_DIR.mkdir(exist_ok=True)
+# Flags that consume the next token (so we can detect positional goal args)
+_VALUE_FLAGS = {"--engine", "-e", "--agent", "-a", "--command",
+                "--system-flag", "--auto-flag", "--project"}
 
 
-def load_config() -> dict:
-    """Load swarm configuration"""
-    if CONFIG_FILE.exists():
-        return json.loads(CONFIG_FILE.read_text())
-    return {"default_engine": "claude", "agents": {}}
-
-
-def dispatch_agent(
-    agent_name: str,
-    task: str,
-    context: str = "",
-    engine_name: str = None,
-    config: dict = None,
-    workspace: Workspace = None,
-    workflow_phase: str = None,
-) -> dict:
-    """Dispatch a task to a specific agent via an engine"""
-
-    if config is None:
-        config = load_config()
-
-    # Determine which engine to use
-    if engine_name is None:
-        engine_name = (
-            config.get("agents", {}).get(agent_name, {}).get("engine")
-            or config.get("default_engine", "claude")
-        )
-
-    # Auto-detect if specified engine isn't available
-    engine = get_engine(engine_name)
-    if engine is None or not shutil.which(engine.command.split()[0]):
-        detected = detect_available_engine()
-        if detected:
-            print(f"  ⚠️  Engine '{engine_name}' not found, auto-detected: {detected}")
-            engine_name = detected
-            engine = get_engine(engine_name)
-        else:
-            return {
-                "agent": agent_name,
-                "status": "ERROR",
-                "error": f"No CLI agent found. Install one of: claude, gemini, kilo, codex, cursor-agent, aider"
-            }
-
-    # Find agent file
-    agent_config = config.get("agents", {}).get(agent_name, {})
-    agent_file = agent_config.get("file")
-
-    if agent_file is None:
-        # Try to find agent file by convention
-        agent_file = f"engineering/{agent_name}.md"
-        if not (AGENTS_DIR / agent_file).exists():
-            agent_file = f"management/{agent_name}.md"
-            if not (AGENTS_DIR / agent_file).exists():
-                return {
-                    "agent": agent_name,
-                    "status": "ERROR",
-                    "error": f"No agent definition found for: {agent_name}"
-                }
-
-    # Build full task with context
-    full_task = task
-    if context:
-        full_task = f"CONTEXT:\n{context}\n\nTASK:\n{task}"
-
-    # Create output directory — in workspace if provided, otherwise in swarm output/
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    if workspace:
-        run_dir = workspace.get_path() / ".swarm-output" / f"{agent_name}_{timestamp}"
-    else:
-        run_dir = OUTPUT_DIR / f"{agent_name}_{timestamp}"
-    run_dir.mkdir(parents=True, exist_ok=True)
-
-    # -----------------------------------------------------------------------
-    # AOS: pre-execution policy gate
-    # -----------------------------------------------------------------------
-    execution_id = aos_client.new_execution_id()
-    phase = workflow_phase or (agent_config.get("source") or "execute")
-
-    policy = aos_client.policy_check(
-        execution_id=execution_id,
-        agent_name=agent_name,
-        task=task,
-        engine=engine_name,
-        workflow_phase=phase if phase in ("questionnaire", "planner", "execute", "debug", "ship", "scout") else None,
-    )
-    if policy.get("decision") == "deny":
-        reason = policy.get("reason", "Denied by AOS policy")
-        print(f"  🚫 [{agent_name}] Blocked by AOS: {reason}")
-        return {
-            "agent": agent_name,
-            "engine": engine_name,
-            "status": "DENIED",
-            "error": reason,
-            "execution_id": execution_id,
-        }
-    if policy.get("decision") == "escalate":
-        print(f"  ⏳ [{agent_name}] AOS escalation required — proceeding in non-blocking mode")
-
-    aos_client.emit_trace(
-        execution_id=execution_id,
-        agent_name=agent_name,
-        phase=phase if phase in ("questionnaire", "planner", "execute", "debug", "ship", "scout") else "execute",
-        event_type="phase_start",
-        payload={"task_preview": task[:200]},
-    )
-
-    print(f"🔄 [{engine_name}] Dispatching to {agent_name}...")
-
-    start = monotonic()
+def _pyc_magic_ok(pyc: Path) -> bool:
+    """Return True only when the .pyc was compiled for the running Python."""
     try:
-        result = engine.run(agent_file, full_task, str(workspace.get_path() if workspace else run_dir))
-        duration_ms = int((monotonic() - start) * 1000)
-
-        # Save output
-        output_file = run_dir / "output.md"
-        output_file.write_text(result["stdout"])
-
-        # Save command used
-        cmd_file = run_dir / "command.txt"
-        cmd_file.write_text(result.get("command", ""))
-
-        # Update memory
-        memory_file = MEMORY_DIR / f"{agent_name}_latest.md"
-        memory_file.write_text(f"# {agent_name} Output — {timestamp}\n\n{result['stdout']}")
-
-        success = result["returncode"] == 0
-        run_status = "✅ SUCCESS" if success else "❌ FAILED"
-        print(f"{run_status} {agent_name}")
-
-        # AOS: post-execution metering + trace
-        aos_client.usage_report(
-            execution_id=execution_id,
-            agent_name=agent_name,
-            engine=engine_name,
-            duration_ms=duration_ms,
-            success=success,
-            error_message=result.get("stderr", "")[:500] if not success else "",
-        )
-        aos_client.emit_trace(
-            execution_id=execution_id,
-            agent_name=agent_name,
-            phase=phase if phase in ("questionnaire", "planner", "execute", "debug", "ship", "scout") else "execute",
-            event_type="phase_complete" if success else "error",
-            payload={"duration_ms": duration_ms, "returncode": result["returncode"]},
-        )
-
-        return {
-            "agent": agent_name,
-            "engine": engine_name,
-            "status": run_status,
-            "output": result["stdout"],
-            "error": result.get("stderr", ""),
-            "command": result.get("command", ""),
-            "output_dir": str(run_dir),
-            "execution_id": execution_id,
-        }
-
-    except Exception as e:
-        duration_ms = int((monotonic() - start) * 1000)
-        print(f"💥 {agent_name} crashed: {e}")
-        aos_client.usage_report(
-            execution_id=execution_id,
-            agent_name=agent_name,
-            engine=engine_name,
-            duration_ms=duration_ms,
-            success=False,
-            error_message=str(e)[:500],
-        )
-        aos_client.emit_trace(
-            execution_id=execution_id,
-            agent_name=agent_name,
-            phase=phase if phase in ("questionnaire", "planner", "execute", "debug", "ship", "scout") else "execute",
-            event_type="error",
-            payload={"error": str(e)[:200]},
-        )
-        return {
-            "agent": agent_name,
-            "engine": engine_name,
-            "status": "ERROR",
-            "error": str(e),
-            "execution_id": execution_id,
-        }
+        with pyc.open("rb") as f:
+            return f.read(4) == importlib.util.MAGIC_NUMBER
+    except OSError:
+        return False
 
 
-def dispatch_parallel(tasks: list, config: dict = None) -> list:
-    """Dispatch multiple agents in parallel"""
-    if config is None:
-        config = load_config()
-    
-    max_workers = config.get("parallel_max_workers", 4)
-    results = []
-    
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(
-                dispatch_agent,
-                t["agent"],
-                t["task"],
-                t.get("context", ""),
-                t.get("engine"),
-                config,
-                None,
-                t.get("workflow_phase", "execute"),
-            ): t
-            for t in tasks
-        }
-        for future in concurrent.futures.as_completed(futures):
-            results.append(future.result())
-    
-    return results
+def _has_goal_in_argv() -> bool:
+    """Return True if a positional goal arg (non-flag) is already in sys.argv."""
+    skip = False
+    for tok in sys.argv[1:]:
+        if skip:
+            skip = False
+            continue
+        if tok in _VALUE_FLAGS:
+            skip = True
+        elif tok in ("--list-engines", "--list-agents", "-h", "--help",
+                     "--interactive", "-i"):
+            return True  # these flags mean "don't prompt", let main() handle
+        elif not tok.startswith("-"):
+            return True  # found a positional goal
+    return False
 
 
-def orchestrate(goal: str, engine: str = None, project_dir: str = ".", interactive: bool = False) -> dict:
-    """
-    Main orchestration workflow:
-    
-    1. QUESTIONNAIRE — Clarify requirements before building
-    2. PLANNER — Design the implementation plan
-    3. EXECUTE — Dispatch agents to implement
-    4. DEBUG — Fix any issues found
-    5. SHIP — Final review and deliver
-    """
-    config = load_config()
-    
-    # ═══════════════════════════════════════════════════════
-    # CREATE WORKSPACE — in current directory, not in swarm folder
-    # ═══════════════════════════════════════════════════════
-    ws_manager = WorkspaceManager(project_dir)
-    workspace = ws_manager.create_workspace(goal)
-    
-    # ═══════════════════════════════════════════════════════
-    # DISPLAY
-    # ═══════════════════════════════════════════════════════
-    TUI.mini_banner()
-    TUI.goal(goal, str(workspace.get_path()), engine or config.get('default_engine', 'claude'))
-    
-    # ═══════════════════════════════════════════════════════
-    # PHASE 1: QUESTIONNAIRE — Ask before you build
-    # ═══════════════════════════════════════════════════════
-    TUI.phase_header(1, "QUESTIONNAIRE", "Clarifying requirements")
-    spinner = Spinner("Questionnaire analyzing goal").start()
-    questions_result = dispatch_agent(
-        "questionnaire",
-        f"Analyze this goal and produce clarifying questions:\n\n{goal}\n\nProject directory: {workspace.get_path()}",
-        context=f"Project at {workspace.get_path()}. Be thorough about scope, users, data, auth, edge cases.",
-        engine_name=engine,
-        config=config,
-        workspace=workspace,
-        workflow_phase="questionnaire",
-    )
-    
-    if questions_result["status"] != "✅ SUCCESS":
-        spinner.stop(False, "Questionnaire failed")
-        TUI.warn("Clarification phase failed.")
-        choice = TUI.prompt("Continue without clarifications? (y/n)")
-        if choice and choice.lower() not in ('y', 'yes'):
-            return {"error": "User chose to stop after questionnaire failure"}
-        clarified_requirements = f"Goal: {goal}\n(No clarifications — building based on goal alone)"
-    else:
-        spinner.stop(True, "Questions ready")
-        clarified_requirements = questions_result["output"]
-        TUI.info("Clarifying questions generated")
-        
-        if interactive:
-            answer = TUI.prompt("Review the questions above. Press Enter to continue, or type answers:")
-            if answer:
-                clarified_requirements += f"\n\nUser answers: {answer}"
-    
-    # ═══════════════════════════════════════════════════════
-    # PHASE 2: PLANNER — Design the implementation
-    # ═══════════════════════════════════════════════════════
-    TUI.phase_header(2, "PLANNER", "Designing implementation")
-    spinner = Spinner("Planner designing architecture").start()
-    plan_result = dispatch_agent(
-        "planner",
-        f"Design a complete implementation plan for:\n\nGOAL:\n{goal}\n\nCLARIFIED REQUIREMENTS:\n{clarified_requirements}\n\nProject directory: {workspace.get_path()}",
-        context="Design architecture, file structure, ordered tasks with dependencies. Be specific.",
-        engine_name=engine,
-        config=config,
-        workspace=workspace,
-        workflow_phase="planner",
-    )
-    
-    if plan_result["status"] != "✅ SUCCESS":
-        spinner.stop(False, "Planner failed")
-        TUI.error("Planning phase failed. Can not continue without a plan.")
-        retry = TUI.prompt("Retry planning? (y/n)")
-        if retry and retry.lower() in ('y', 'yes'):
-            # Retry once
-            spinner = Spinner("Retrying planner").start()
-            plan_result = dispatch_agent(
-                "planner",
-                f"RETRY: Design a complete implementation plan for:\n\nGOAL:\n{goal}\n\nCLARIFIED REQUIREMENTS:\n{clarified_requirements}",
-                context="Previous attempt failed. Design architecture and tasks. Be specific.",
-                engine_name=engine,
-                config=config,
-                workspace=workspace,
-            )
-            if plan_result["status"] != "✅ SUCCESS":
-                spinner.stop(False, "Planner failed again")
-                return {"error": "Planner failed twice", "details": plan_result}
-            spinner.stop(True, "Plan ready on retry")
-        else:
-            return {"error": "Planner failed, user chose not to retry", "details": plan_result}
-    
-    spinner.stop(True, "Plan ready")
-    TUI.info("Implementation plan designed")
-    
-    # ═══════════════════════════════════════════════════════
-    # PHASE 3: EXECUTE — Dispatch specialist agents
-    # ═══════════════════════════════════════════════════════
-    TUI.phase_header(3, "EXECUTE", "Dispatching specialist agents")
-    tasks = parse_tasks(plan_result["output"], goal, engine)
-    
-    for t in tasks:
-        TUI.agent_start(t["agent"], t.get("engine") or engine or "auto")
-    
-    spinner = Spinner(f"Running {len(tasks)} agents").start()
-    results = dispatch_parallel(tasks, config)
-    spinner.stop(True, f"{len(tasks)} agents completed")
-    
-    # Show results
-    for r in results:
-        if "SUCCESS" in r.get("status", ""):
-            TUI.agent_success(r["agent"], 0)
-        else:
-            TUI.agent_fail(r["agent"], r.get("error", "Unknown"))
-    
-    # ═══════════════════════════════════════════════════════
-    # PHASE 4: DEBUG — Fix any issues
-    # ═══════════════════════════════════════════════════════
-    failed_agents = [r for r in results if r.get("status") != "✅ SUCCESS"]
-    if failed_agents:
-        TUI.phase_header(4, "DEBUG", f"Fixing {len(failed_agents)} failure(s)")
-        
-        for failed in failed_agents:
-            TUI.agent_debug(failed["agent"])
-            spinner = Spinner(f"Debugging {failed['agent']}").start()
-            
-            debug_result = dispatch_agent(
-                "debugger",
-                f"Debug this failed agent output:\n\nAgent: {failed['agent']}\nError: {failed.get('error', 'Unknown')}\n\nOriginal task context:\n{plan_result['output'][:1000]}",
-                context=f"Find root cause and fix. Original goal: {goal}",
-                engine_name=engine,
-                config=config,
-                workspace=workspace,
-                workflow_phase="debug",
-            )
-            if debug_result["status"] == "✅ SUCCESS":
-                spinner.stop(True, f"{failed['agent']} fixed")
-                for i, r in enumerate(results):
-                    if r["agent"] == failed["agent"]:
-                        results[i] = {
-                            "agent": failed["agent"],
-                            "engine": engine,
-                            "status": "✅ DEBUGGED",
-                            "output": debug_result["output"],
-                            "original_error": failed.get("error", ""),
-                            "debug_notes": debug_result["output"][:200]
-                        }
-            else:
-                spinner.stop(False, f"{failed['agent']} still broken")
-    else:
-        TUI.phase_header(4, "DEBUG", "Checking for issues")
-        TUI.success("No failures detected")
-    
-    # ═══════════════════════════════════════════════════════
-    # PHASE 5: SHIP — Final review
-    # ═══════════════════════════════════════════════════════
-    TUI.phase_header(5, "SHIP", "Tech Lead final review")
-    spinner = Spinner("Tech Lead reviewing").start()
-    
-    review_context = "\n\n".join([
-        f"## {r['agent']} ({r.get('status', '?')})\n{r.get('output', '')[:500]}"
-        for r in results
-    ])
-    
-    review_result = dispatch_agent(
-        "tech-lead",
-        f"Final review of all agent outputs for consistency, quality, and completeness:\n\n{review_context}",
-        context=f"Goal: {goal}. Check for conflicts, missing pieces, quality issues.",
-        engine_name=engine,
-        config=config,
-        workspace=workspace,
-        workflow_phase="ship",
-    )
-    
-    if review_result["status"] == "✅ SUCCESS":
-        spinner.stop(True, "Review complete")
-    else:
-        spinner.stop(False, "Review failed")
-    
-    # ═══════════════════════════════════════════════════════
-    # FINAL SUMMARY
-    # ═══════════════════════════════════════════════════════
-    workspace.complete("completed")
-    
-    total = len(results)
-    succeeded = len([r for r in results if "SUCCESS" in r.get("status", "")])
-    failed_count = len([r for r in results if "FAILED" in r.get("status", "")])
-    debugged = len([r for r in results if "DEBUG" in r.get("status", "")])
-    duration = (datetime.now() - workspace.created_at).total_seconds()
-    
-    TUI.divider()
-    TUI.summary(total, succeeded, failed_count, debugged, duration)
-    TUI.complete(str(workspace.get_path()))
-    
-    report = {
-        "goal": goal,
-        "workspace": str(workspace.get_path()),
-        "engine": engine or config.get("default_engine"),
-        "timestamp": datetime.now().isoformat(),
-        "workflow": {
-            "questionnaire": questions_result.get("output", ""),
-            "plan": plan_result.get("output", ""),
-            "execution": results,
-            "debug": [r for r in results if "DEBUG" in r.get("status", "")],
-            "review": review_result.get("output", ""),
-        },
-        "status": "COMPLETED",
-        "agents_used": len(tasks),
-        "agents_succeeded": len([r for r in results if "SUCCESS" in r.get("status", "")]),
-        "agents_failed": len([r for r in results if "FAILED" in r.get("status", "")]),
-        "agents_debugged": len([r for r in results if "DEBUG" in r.get("status", "")]),
+def _exec_pyc(pyc: Path) -> None:
+    with pyc.open("rb") as f:
+        f.read(16)  # skip header
+        code = marshal.load(f)
+    tgt = sys.modules["__main__"].__dict__
+    tgt.setdefault("__file__", str(_pkg / "orchestrator.py"))
+    tgt.setdefault("__package__", None)
+    tgt["__cached__"] = str(pyc)
+    exec(code, tgt)  # noqa: S102
+
+
+def _exec_snapshot() -> None:
+    src = _SNAPSHOT.read_text(encoding="utf-8")
+    code = compile(src, str(_SNAPSHOT), "exec")
+    globs: dict = {
+        "__file__": str(_pkg / "orchestrator.py"),
+        "__name__": "__main__",
+        "__package__": None,
+        "__spec__": None,
     }
-    
-    report_file = OUTPUT_DIR / f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    report_file.write_text(json.dumps(report, indent=2, default=str))
-    
-    # Also save report in workspace
-    ws_report = workspace.get_path() / ".swarm-report.json"
-    ws_report.write_text(json.dumps(report, indent=2, default=str))
-    
-    print(f"\n{'=' * 60}")
-    print(f"✅ COMPLETE! Agents: {report['agents_used']} | "
-          f"✅ {report['agents_succeeded']} | "
-          f"❌ {report['agents_failed']} | "
-          f"🐛 {report['agents_debugged']}")
-    print(f"📄 Report: {report_file}")
-    print(f"{'=' * 60}")
-    
-    return report
+    exec(code, globs)  # noqa: S102
 
 
-def parse_tasks(pm_output: str, goal: str, engine: str = None) -> list:
-    """Parse PM output into dispatchable tasks"""
-    tasks = []
-    goal_lower = goal.lower()
-    
-    if any(kw in goal_lower for kw in ["website", "web app", "landing page", "frontend", "ui"]):
-        tasks.append({
-            "agent": "frontend-dev",
-            "task": f"Build the frontend for: {goal}",
-            "context": pm_output,
-            "engine": engine
-        })
-    
-    if any(kw in goal_lower for kw in ["api", "backend", "server", "database", "auth"]):
-        tasks.append({
-            "agent": "backend-dev",
-            "task": f"Build the backend for: {goal}",
-            "context": pm_output,
-            "engine": engine
-        })
-    
-    if any(kw in goal_lower for kw in ["deploy", "docker", "ci/cd", "pipeline", "hosting"]):
-        tasks.append({
-            "agent": "devops",
-            "task": f"Set up deployment for: {goal}",
-            "context": pm_output,
-            "engine": engine
-        })
-    
-    if any(kw in goal_lower for kw in ["secure", "security", "audit"]):
-        tasks.append({
-            "agent": "security",
-            "task": f"Audit security for: {goal}",
-            "context": pm_output,
-            "engine": engine
-        })
-    
-    # Always add QA
-    tasks.append({
-        "agent": "qa-tester",
-        "task": f"Write tests for: {goal}",
-        "context": pm_output,
-        "engine": engine
-    })
-    
-    # Default: frontend + backend
-    if not tasks:
-        tasks = [
-            {"agent": "frontend-dev", "task": f"Build the frontend for: {goal}", "context": pm_output, "engine": engine},
-            {"agent": "backend-dev", "task": f"Build the backend for: {goal}", "context": pm_output, "engine": engine},
-        ]
-    
-    return tasks
+def _pick_runner():
+    """Return (runner_fn, needs_interactive_wrap) tuple."""
+    for pyc in _PYC_CANDIDATES:
+        if pyc.is_file() and _pyc_magic_ok(pyc):
+            return _exec_pyc, pyc, True   # .pyc: its main() may have old print_help
+    if not _SNAPSHOT.is_file():
+        sys.stderr.write(
+            "\nSwarm cannot start: no compatible orchestrator found.\n"
+            f"  Bytecode requires Python 3.13 (you have {sys.version.split()[0]})\n"
+            f"  Snapshot fallback not found: {_SNAPSHOT}\n"
+            "Try upgrading to Python 3.13 or reinstalling the package.\n\n"
+        )
+        sys.exit(1)
+    return _exec_snapshot, None, False  # snapshot: its main() handles interactive
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="🛡️ Agent Swarm — Engine-agnostic multi-agent orchestrator",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  %(prog)s "Build a landing page for TeenovateX"
-  %(prog)s --engine gemini "Create a REST API"
-  %(prog)s --engine generic --command "my-agent" --system-flag "--role" "Do something"
-  %(prog)s --agent frontend-dev "Create a navbar"
-  %(prog)s --list-engines
-  %(prog)s --list-agents
-        """
-    )
-    
-    parser.add_argument("goal", nargs="?", help="Goal or task description")
-    parser.add_argument("--engine", "-e", help="Engine to use (claude, gemini, codex, kilocode, etc.)")
-    parser.add_argument("--agent", "-a", help="Dispatch to a specific agent only")
-    parser.add_argument("--command", help="Custom command for generic engine")
-    parser.add_argument("--system-flag", default="--prompt", help="System prompt flag for generic engine")
-    parser.add_argument("--auto-flag", default="", help="Auto/yes flag for generic engine")
-    parser.add_argument("--project", default=".", help="Project directory")
-    parser.add_argument("--interactive", "-i", action="store_true", help="Interactive mode — pause for human input between phases")
-    parser.add_argument("--list-engines", action="store_true", help="List available engines")
-    parser.add_argument("--list-agents", action="store_true", help="List available agents")
-    parser.add_argument("--register-engine", nargs=3, metavar=("NAME", "COMMAND", "FLAG"),
-                        help="Register a custom engine: NAME COMMAND SYSTEM_FLAG")
-    
-    args = parser.parse_args()
-    
-    # List engines
-    if args.list_engines:
-        print("\n🔧 Available Engines:\n")
-        all_available = detect_all_available()
-        for eng in list_engines():
-            status = "✅ INSTALLED" if eng['name'] in all_available else "❌ not found"
-            print(f"  {eng['name']:12} — {eng['command']:20} {status}")
-        print(f"\n  {'generic':12} — (configure dynamically with --command and --system-flag)")
-        if all_available:
-            print(f"\n  Auto-detected default: {all_available[0]}")
-        print(f"\n  Total: {len(list_engines()) + 1} engines ({len(all_available)} available)")
-        return
-    
-    # List agents
-    if args.list_agents:
-        config = load_config()
-        print("\n🤖 Available Agents:\n")
-        for name, conf in config.get("agents", {}).items():
-            print(f"  {name:20} — {conf.get('description', 'No description')}")
-        print(f"\nTotal: {len(config.get('agents', {}))} agents")
-        return
-    
-    # Register custom engine
-    if args.register_engine:
-        name, command, flag = args.register_engine
-        
-        class CustomEngine(BaseEngine):
-            pass
-        
-        CustomEngine.name = name
-        CustomEngine.command = command
-        CustomEngine.system_prompt_flag = flag
-        
-        register_engine(name, CustomEngine)
-        print(f"✅ Registered custom engine: {name} ({command} {flag})")
-        return
-    
-    # Configure generic engine
-    if args.command:
-        GenericEngine.configure(args.command, args.system_flag, args.auto_flag)
-        register_engine("generic", GenericEngine)
-    
-    # Single agent dispatch
-    if args.agent:
-        if not args.goal:
-            print("❌ Error: Provide a task/goal after --agent")
-            sys.exit(1)
-        
-        result = dispatch_agent(args.agent, args.goal, engine_name=args.engine)
-        print(json.dumps(result, indent=2, default=str))
-        return
-    
-    # Full orchestration
-    if args.goal:
-        report = orchestrate(args.goal, engine=args.engine, project_dir=args.project, interactive=args.interactive)
-        return
-    
-    # No args — show help
-    parser.print_help()
+def _run() -> None:
+    exec_fn, pyc_arg, needs_wrap = _pick_runner()
+
+    # The snapshot's main() already has a full interactive loop.
+    # For the .pyc path the original main() may just print_help on no-args,
+    # so we wrap it here: show the banner, prompt for a goal, inject into
+    # sys.argv, exec (which calls main() with the goal), then ask for another.
+    if needs_wrap and not _has_goal_in_argv():
+        try:
+            from core.tui import TUI, Colors as C  # noqa: PLC0415
+        except ImportError:
+            exec_fn(pyc_arg)
+            return
+
+        TUI.banner()
+        print(f"  {C.DIM}Type your goal, or /help for commands. Empty input or Ctrl+C to exit.{C.RESET}\n")
+
+        # Session state shared with slash-command handlers
+        _session_engine      = {"name": "openai"}
+        _session_agent       = {"name": "swarm-assistant"}
+        _session_model       = {"name": None}
+        _project_path_holder = {"path": str(_pkg)}
+
+        try:
+            from core.slash_commands import handle_slash_line  # noqa: PLC0415
+            _slash_available = True
+        except ImportError:
+            _slash_available = False
+
+        def _handle_slash(raw: str):
+            if not _slash_available:
+                print(f"  {C.DIM}(slash commands unavailable — core.slash_commands not found){C.RESET}")
+                class _FakeOutcome:
+                    stop = False
+                return _FakeOutcome()
+            return handle_slash_line(
+                raw,
+                session_engine=_session_engine,
+                session_agent=_session_agent,
+                session_model=_session_model,
+                project_path_holder=_project_path_holder,
+                on_reload_config=lambda: None,
+                on_set_agent=lambda slug: None,
+                on_set_paths=lambda: None,
+                on_run_company=lambda goal: (
+                    sys.argv.append(goal),
+                    exec_fn(pyc_arg),
+                    (sys.argv.pop() if sys.argv and sys.argv[-1] == goal else None),
+                ),
+            )
+
+        while True:
+            try:
+                goal = TUI.prompt("What should the swarm build for you?")
+            except (KeyboardInterrupt, EOFError):
+                goal = ""
+            if not goal:
+                TUI.goodbye()
+                sys.exit(0)
+
+            goal = goal.strip()
+            if not goal:
+                continue
+
+            # Intercept slash commands — never pass them to exec_fn
+            if goal.startswith("/"):
+                outcome = _handle_slash(goal)
+                if getattr(outcome, "stop", False):
+                    TUI.goodbye()
+                    sys.exit(0)
+                print()
+                continue
+
+            sys.argv.append(goal)
+            try:
+                exec_fn(pyc_arg)
+            finally:
+                if sys.argv and sys.argv[-1] == goal:
+                    sys.argv.pop()
+
+            print()
+        sys.exit(0)
+
+    # Normal path: goal already in argv (or snapshot handles its own TUI loop)
+    if pyc_arg is not None:
+        exec_fn(pyc_arg)
+    else:
+        exec_fn()
 
 
-if __name__ == "__main__":
-    main()
+_run()

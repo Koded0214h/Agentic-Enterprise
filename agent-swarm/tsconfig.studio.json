@@ -1,0 +1,10 @@
+// Studio build: compile theme only. Full `src/**/*` is an incomplete tree and
+// does not typecheck without many internal modules (see root tsconfig include).
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "types": ["node"]
+  },
+  "include": ["src/utils/theme.ts"]
+}

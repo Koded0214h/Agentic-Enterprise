@@ -1,0 +1,13 @@
+# Agent Swarm Python orchestrator dependencies (auto-installed on first run).
+# Override with SWARM_SKIP_PYTHON_DEPS=1 to skip pip.
+#
+# pip install -r requirements-swarm.txt
+
+# Framed composer uses stdin inside an ASCII rectangle (no extra dependency).
+
+# MCP hub: stdio + Streamable HTTP / SSE (+ optional WebSocket servers).
+mcp>=1.12.0
+websockets>=15.0.1
+
+# Interactive REPL input (paste chips, arrows, histories)
+prompt_toolkit>=3.0.43

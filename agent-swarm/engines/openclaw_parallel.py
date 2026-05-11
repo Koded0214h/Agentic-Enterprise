@@ -20,6 +20,29 @@ from pathlib import Path
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+
+def _gateway_http_timeout_spawn() -> int:
+    """POST /sessions/spawn — from SWARM_GATEWAY_HTTP_TIMEOUT_SECONDS (1–300, default 30)."""
+    import os
+
+    try:
+        v = int(os.environ.get("SWARM_GATEWAY_HTTP_TIMEOUT_SECONDS", "30"))
+        return max(1, min(300, v))
+    except ValueError:
+        return 30
+
+
+def _gateway_http_timeout_poll() -> int:
+    """Poll session status GET — from SWARM_GATEWAY_POLL_HTTP_TIMEOUT_SECONDS (1–120, default 10)."""
+    import os
+
+    try:
+        v = int(os.environ.get("SWARM_GATEWAY_POLL_HTTP_TIMEOUT_SECONDS", "10"))
+        return max(1, min(120, v))
+    except ValueError:
+        return 10
+
+
 SWARM_ROOT = Path(__file__).parent.parent
 AGENTS_DIR = SWARM_ROOT / "agents"
 MEMORY_DIR = SWARM_ROOT / "memory"
@@ -146,7 +169,7 @@ Begin now."""
                 method="POST"
             )
             
-            with urllib.request.urlopen(req, timeout=30) as response:
+            with urllib.request.urlopen(req, timeout=_gateway_http_timeout_spawn()) as response:
                 result = json.loads(response.read())
                 self.session_key = result.get("sessionKey")
                 return result
@@ -236,7 +259,7 @@ class OpenClawParallelEngine:
                         f"{gateway_url}/api/sessions/{key}/status",
                         headers={"Authorization": f"Bearer {gateway_token}"} if gateway_token else {},
                     )
-                    with urllib.request.urlopen(req, timeout=10) as response:
+                    with urllib.request.urlopen(req, timeout=_gateway_http_timeout_poll()) as response:
                         status = json.loads(response.read())
                         
                         if status.get("state") in ("completed", "failed", "cancelled"):

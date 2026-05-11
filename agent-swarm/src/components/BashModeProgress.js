@@ -1,0 +1,53 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.BashModeProgress = BashModeProgress;
+var compiler_runtime_1 = require("react/compiler-runtime");
+var react_1 = require("react");
+var ink_js_1 = require("../ink.js");
+var BashTool_js_1 = require("../tools/BashTool/BashTool.js");
+var UserBashInputMessage_js_1 = require("./messages/UserBashInputMessage.js");
+var ShellProgressMessage_js_1 = require("./shell/ShellProgressMessage.js");
+function BashModeProgress(t0) {
+    var _a;
+    var $ = (0, compiler_runtime_1.c)(8);
+    var input = t0.input, progress = t0.progress, verbose = t0.verbose;
+    var t1 = "<bash-input>".concat(input, "</bash-input>");
+    var t2;
+    if ($[0] !== t1) {
+        t2 = <UserBashInputMessage_js_1.UserBashInputMessage addMargin={false} param={{
+                text: t1,
+                type: "text"
+            }}/>;
+        $[0] = t1;
+        $[1] = t2;
+    }
+    else {
+        t2 = $[1];
+    }
+    var t3;
+    if ($[2] !== progress || $[3] !== verbose) {
+        t3 = progress ? <ShellProgressMessage_js_1.ShellProgressMessage fullOutput={progress.fullOutput} output={progress.output} elapsedTimeSeconds={progress.elapsedTimeSeconds} totalLines={progress.totalLines} verbose={verbose}/> : (_a = BashTool_js_1.BashTool.renderToolUseProgressMessage) === null || _a === void 0 ? void 0 : _a.call(BashTool_js_1.BashTool, [], {
+            verbose: verbose,
+            tools: [],
+            terminalSize: undefined
+        });
+        $[2] = progress;
+        $[3] = verbose;
+        $[4] = t3;
+    }
+    else {
+        t3 = $[4];
+    }
+    var t4;
+    if ($[5] !== t2 || $[6] !== t3) {
+        t4 = <ink_js_1.Box flexDirection="column" marginTop={1}>{t2}{t3}</ink_js_1.Box>;
+        $[5] = t2;
+        $[6] = t3;
+        $[7] = t4;
+    }
+    else {
+        t4 = $[7];
+    }
+    return t4;
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJSZWFjdCIsIkJveCIsIkJhc2hUb29sIiwiU2hlbGxQcm9ncmVzcyIsIlVzZXJCYXNoSW5wdXRNZXNzYWdlIiwiU2hlbGxQcm9ncmVzc01lc3NhZ2UiLCJQcm9wcyIsImlucHV0IiwicHJvZ3Jlc3MiLCJ2ZXJib3NlIiwiQmFzaE1vZGVQcm9ncmVzcyIsInQwIiwiJCIsIl9jIiwidDEiLCJ0MiIsInRleHQiLCJ0eXBlIiwidDMiLCJmdWxsT3V0cHV0Iiwib3V0cHV0IiwiZWxhcHNlZFRpbWVTZWNvbmRzIiwidG90YWxMaW5lcyIsInJlbmRlclRvb2xVc2VQcm9ncmVzc01lc3NhZ2UiLCJ0b29scyIsInRlcm1pbmFsU2l6ZSIsInVuZGVmaW5lZCIsInQ0Il0sInNvdXJjZXMiOlsiQmFzaE1vZGVQcm9ncmVzcy50c3giXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IFJlYWN0IGZyb20gJ3JlYWN0J1xuaW1wb3J0IHsgQm94IH0gZnJvbSAnLi4vaW5rLmpzJ1xuaW1wb3J0IHsgQmFzaFRvb2wgfSBmcm9tICcuLi90b29scy9CYXNoVG9vbC9CYXNoVG9vbC5qcydcbmltcG9ydCB0eXBlIHsgU2hlbGxQcm9ncmVzcyB9IGZyb20gJy4uL3R5cGVzL3Rvb2xzLmpzJ1xuaW1wb3J0IHsgVXNlckJhc2hJbnB1dE1lc3NhZ2UgfSBmcm9tICcuL21lc3NhZ2VzL1VzZXJCYXNoSW5wdXRNZXNzYWdlLmpzJ1xuaW1wb3J0IHsgU2hlbGxQcm9ncmVzc01lc3NhZ2UgfSBmcm9tICcuL3NoZWxsL1NoZWxsUHJvZ3Jlc3NNZXNzYWdlLmpzJ1xuXG50eXBlIFByb3BzID0ge1xuICBpbnB1dDogc3RyaW5nXG4gIHByb2dyZXNzOiBTaGVsbFByb2dyZXNzIHwgbnVsbFxuICB2ZXJib3NlOiBib29sZWFuXG59XG5cbmV4cG9ydCBmdW5jdGlvbiBCYXNoTW9kZVByb2dyZXNzKHtcbiAgaW5wdXQsXG4gIHByb2dyZXNzLFxuICB2ZXJib3NlLFxufTogUHJvcHMpOiBSZWFjdC5SZWFjdE5vZGUge1xuICByZXR1cm4gKFxuICAgIDxCb3ggZmxleERpcmVjdGlvbj1cImNvbHVtblwiIG1hcmdpblRvcD17MX0+XG4gICAgICA8VXNlckJhc2hJbnB1dE1lc3NhZ2VcbiAgICAgICAgYWRkTWFyZ2luPXtmYWxzZX1cbiAgICAgICAgcGFyYW09e3sgdGV4dDogYDxiYXNoLWlucHV0PiR7aW5wdXR9PC9iYXNoLWlucHV0PmAsIHR5cGU6ICd0ZXh0JyB9fVxuICAgICAgLz5cbiAgICAgIHtwcm9ncmVzcyA/IChcbiAgICAgICAgPFNoZWxsUHJvZ3Jlc3NNZXNzYWdlXG4gICAgICAgICAgZnVsbE91dHB1dD17cHJvZ3Jlc3MuZnVsbE91dHB1dH1cbiAgICAgICAgICBvdXRwdXQ9e3Byb2dyZXNzLm91dHB1dH1cbiAgICAgICAgICBlbGFwc2VkVGltZVNlY29uZHM9e3Byb2dyZXNzLmVsYXBzZWRUaW1lU2Vjb25kc31cbiAgICAgICAgICB0b3RhbExpbmVzPXtwcm9ncmVzcy50b3RhbExpbmVzfVxuICAgICAgICAgIHZlcmJvc2U9e3ZlcmJvc2V9XG4gICAgICAgIC8+XG4gICAgICApIDogKFxuICAgICAgICBCYXNoVG9vbC5yZW5kZXJUb29sVXNlUHJvZ3Jlc3NNZXNzYWdlPy4oW10sIHtcbiAgICAgICAgICB2ZXJib3NlLFxuICAgICAgICAgIHRvb2xzOiBbXSxcbiAgICAgICAgICB0ZXJtaW5hbFNpemU6IHVuZGVmaW5lZCxcbiAgICAgICAgfSlcbiAgICAgICl9XG4gICAgPC9Cb3g+XG4gIClcbn1cbiJdLCJtYXBwaW5ncyI6IjtBQUFBLE9BQU9BLEtBQUssTUFBTSxPQUFPO0FBQ3pCLFNBQVNDLEdBQUcsUUFBUSxXQUFXO0FBQy9CLFNBQVNDLFFBQVEsUUFBUSwrQkFBK0I7QUFDeEQsY0FBY0MsYUFBYSxRQUFRLG1CQUFtQjtBQUN0RCxTQUFTQyxvQkFBb0IsUUFBUSxvQ0FBb0M7QUFDekUsU0FBU0Msb0JBQW9CLFFBQVEsaUNBQWlDO0FBRXRFLEtBQUtDLEtBQUssR0FBRztFQUNYQyxLQUFLLEVBQUUsTUFBTTtFQUNiQyxRQUFRLEVBQUVMLGFBQWEsR0FBRyxJQUFJO0VBQzlCTSxPQUFPLEVBQUUsT0FBTztBQUNsQixDQUFDO0FBRUQsT0FBTyxTQUFBQyxpQkFBQUMsRUFBQTtFQUFBLE1BQUFDLENBQUEsR0FBQUMsRUFBQTtFQUEwQjtJQUFBTixLQUFBO0lBQUFDLFFBQUE7SUFBQUM7RUFBQSxJQUFBRSxFQUl6QjtFQUtlLE1BQUFHLEVBQUEsa0JBQWVQLEtBQUssZUFBZTtFQUFBLElBQUFRLEVBQUE7RUFBQSxJQUFBSCxDQUFBLFFBQUFFLEVBQUE7SUFGcERDLEVBQUEsSUFBQyxvQkFBb0IsQ0FDUixTQUFLLENBQUwsTUFBSSxDQUFDLENBQ1QsS0FBMkQsQ0FBM0Q7TUFBQUMsSUFBQSxFQUFRRixFQUFtQztNQUFBRyxJQUFBLEVBQVE7SUFBTyxFQUFDLEdBQ2xFO0lBQUFMLENBQUEsTUFBQUUsRUFBQTtJQUFBRixDQUFBLE1BQUFHLEVBQUE7RUFBQTtJQUFBQSxFQUFBLEdBQUFILENBQUE7RUFBQTtFQUFBLElBQUFNLEVBQUE7RUFBQSxJQUFBTixDQUFBLFFBQUFKLFFBQUEsSUFBQUksQ0FBQSxRQUFBSCxPQUFBO0lBQ0RTLEVBQUEsR0FBQVYsUUFBUSxHQUNQLENBQUMsb0JBQW9CLENBQ1AsVUFBbUIsQ0FBbkIsQ0FBQUEsUUFBUSxDQUFBVyxVQUFVLENBQUMsQ0FDdkIsTUFBZSxDQUFmLENBQUFYLFFBQVEsQ0FBQVksTUFBTSxDQUFDLENBQ0gsa0JBQTJCLENBQTNCLENBQUFaLFFBQVEsQ0FBQWEsa0JBQWtCLENBQUMsQ0FDbkMsVUFBbUIsQ0FBbkIsQ0FBQWIsUUFBUSxDQUFBYyxVQUFVLENBQUMsQ0FDdEJiLE9BQU8sQ0FBUEEsUUFBTSxDQUFDLEdBUW5CLEdBTENQLFFBQVEsQ0FBQXFCLDRCQUlOLEdBSnNDLEVBQUUsRUFBRTtNQUFBZCxPQUFBO01BQUFlLEtBQUEsRUFFbkMsRUFBRTtNQUFBQyxZQUFBLEVBQ0tDO0lBQ2hCLENBQ0YsQ0FBQztJQUFBZCxDQUFBLE1BQUFKLFFBQUE7SUFBQUksQ0FBQSxNQUFBSCxPQUFBO0lBQUFHLENBQUEsTUFBQU0sRUFBQTtFQUFBO0lBQUFBLEVBQUEsR0FBQU4sQ0FBQTtFQUFBO0VBQUEsSUFBQWUsRUFBQTtFQUFBLElBQUFmLENBQUEsUUFBQUcsRUFBQSxJQUFBSCxDQUFBLFFBQUFNLEVBQUE7SUFuQkhTLEVBQUEsSUFBQyxHQUFHLENBQWUsYUFBUSxDQUFSLFFBQVEsQ0FBWSxTQUFDLENBQUQsR0FBQyxDQUN0QyxDQUFBWixFQUdDLENBQ0EsQ0FBQUcsRUFjRCxDQUNGLEVBcEJDLEdBQUcsQ0FvQkU7SUFBQU4sQ0FBQSxNQUFBRyxFQUFBO0lBQUFILENBQUEsTUFBQU0sRUFBQTtJQUFBTixDQUFBLE1BQUFlLEVBQUE7RUFBQTtJQUFBQSxFQUFBLEdBQUFmLENBQUE7RUFBQTtFQUFBLE9BcEJOZSxFQW9CTTtBQUFBIiwiaWdub3JlTGlzdCI6W119

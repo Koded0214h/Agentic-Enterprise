@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "types": ["node"],
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": false,
+    "noEmit": false
+  },
+  "include": ["src/swarm-entry.ts", "src/swarm-bootstrap-deps.ts", "src/swarm-update-notify.ts"]
+}

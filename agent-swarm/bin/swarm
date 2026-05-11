@@ -1,28 +1,377 @@
 #!/usr/bin/env node
+// Agent Swarm — Multi-Agent AI Orchestration Platform
 
 import { spawn } from 'child_process';
-import { join, dirname } from 'path';
+import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { readFileSync } from 'fs';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const SWARM_ROOT = join(__dirname, '..');
+const entry = join(SWARM_ROOT, 'dist', 'swarm-entry.js');
 
-// Run the new TypeScript-based CLI
-const child = spawn('npx', ['tsx', join(SWARM_ROOT, 'src', 'main.tsx'), ...process.argv.slice(2)], {
+// ─────────────────────────────────────────────────────────────
+// ANSI helpers (no external deps needed)
+// ─────────────────────────────────────────────────────────────
+const HIDE_CURSOR = '\x1b[?25l';
+const SHOW_CURSOR = '\x1b[?25h';
+const CLEAR_LINE = '\x1b[2K\r';
+const ERASE_DOWN = '\x1b[J';
+const moveUp = (n) => n > 0 ? `\x1b[${n}A` : '';
+const out = (s) => process.stdout.write(s);
+const isTTY = !!process.stdout.isTTY;
+const skipSplash = !isTTY || process.env.CI || process.env.NO_SPLASH || process.env.TERM === 'dumb';
+
+// ─────────────────────────────────────────────────────────────
+// Chalk (graceful degradation when unavailable)
+// ─────────────────────────────────────────────────────────────
+let chalk;
+try {
+  chalk = (await import('chalk')).default;
+} catch {
+  const id = (s) => String(s);
+  const proxy = new Proxy(id, { get: () => proxy });
+  chalk = proxy;
+  chalk.level = 0;
+}
+
+const hasColor = isTTY && chalk.level > 0;
+// NWO / Swarm brand — primary mint, blues as secondary accents
+const SWARM_PRIMARY = '#7BD289';
+const SWARM_PRIMARY_SOFT = '#A8EBBC';
+const SWARM_PRIMARY_DEEP = '#56B06F';
+const SWARM_SECONDARY_BLUE = '#4895EF';
+const SWARM_SECONDARY_BLUE_DEEP = '#3B74D9';
+
+const applyHex = (color, text) => { try { return hasColor ? chalk.hex(color)(text) : text; } catch { return text; } };
+const applyDim = (t) => hasColor ? chalk.dim(t) : t;
+const applyPrimary = (t) => applyHex(SWARM_PRIMARY, t);
+const applyBold = (t) => hasColor ? chalk.bold(t) : t;
+const applyItalic = (t) => hasColor ? chalk.italic(t) : t;
+
+// ─────────────────────────────────────────────────────────────
+// Version
+// ─────────────────────────────────────────────────────────────
+let version = '4.0.3';
+try {
+  const pkg = JSON.parse(readFileSync(join(SWARM_ROOT, 'package.json'), 'utf8'));
+  version = pkg.version || version;
+} catch { /* ignore */ }
+
+// ─────────────────────────────────────────────────────────────
+// ASCII Logo — ANSI Shadow figlet style
+// ─────────────────────────────────────────────────────────────
+const AGENT_LINES = [
+  ' █████╗  ██████╗ ███████╗███╗   ██╗████████╗',
+  '██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝',
+  '███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║   ',
+  '██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║   ',
+  '██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║   ',
+  '╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝  ╚═╝   ',
+];
+const SWARM_LINES = [
+  '███████╗██╗    ██╗ █████╗ ██████╗ ███╗   ███╗',
+  '██╔════╝██║    ██║██╔══██╗██╔══██╗████╗ ████║',
+  '███████╗██║ █╗ ██║███████║██████╔╝██╔████╔██║',
+  '╚════██║██║███╗██║██╔══██║██╔══██╗██║╚██╔╝██║',
+  '███████║╚███╔███╔╝██║  ██║██║  ██║██║ ╚═╝ ██║',
+  '╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝',
+];
+
+// Gradient color palettes (6 rows each) — primary greens + secondary blues / warm swarm word
+const AGENT_COLORS = [
+  SWARM_PRIMARY_SOFT,
+  SWARM_PRIMARY,
+  SWARM_PRIMARY_DEEP,
+  SWARM_SECONDARY_BLUE,
+  SWARM_SECONDARY_BLUE_DEEP,
+  '#3568C4',
+];
+const SWARM_COLORS = ['#FF6B6B', '#FF9F6E', SWARM_PRIMARY, '#FF9F6E', SWARM_SECONDARY_BLUE, '#FF5C5C'];
+
+// ─────────────────────────────────────────────────────────────
+// Phrases
+// ─────────────────────────────────────────────────────────────
+const BOOT_PHRASES = [
+  '"In the beginning was the command line." — Neal Stephenson',
+  '"The future is already here — it\'s just not evenly distributed." — William Gibson',
+  '"Any sufficiently advanced AI is indistinguishable from a very helpful coworker."',
+  '"Hello, Dave. Just kidding. Hello, human." — HAL 9000 (reformed)',
+  '"There is no spoon. But there is a context window." — The Matrix',
+  '"Resistance is futile — to good documentation." — The Borg',
+  '"One prompt to rule them all. One swarm to find them." — Tolkien (patched)',
+  '"These aren\'t the droids you\'re looking for... but these agents might be."',
+  '"Live long and prosper. (Ship before the sprint ends.)" — Spock',
+  '"Engage." — Captain Picard (every Monday morning)',
+  '"I find your lack of context... disturbing." — Darth Vader',
+  '"I compute, therefore I am." — Descartes 2.0',
+  '"To iterate is human, to recurse divine." — L. Peter Deutsch',
+  '"The unexamined code is not worth shipping." — Socrates (posthumously)',
+  '"That which does not crash only makes the CI stronger." — Nietzsche',
+  '"The journey of a thousand features begins with a single commit." — Lao Tzu',
+  '"sudo make me extraordinary."',
+  '"Have you tried turning your problem into a well-structured prompt?"',
+  '"It\'s not a bug — it\'s an emergent feature of complex systems."',
+  '"Works on my machine™. Yours too, probably."',
+  '"The answer is 42. The prompt is still being refined." — Hitchhiker\'s Guide',
+  '"Talk is cheap. Show me the agents." — Linus Torvalds (agent edition)',
+  '"Move fast and fix things. (We fixed the motto.)"',
+  '"There are only 10 types of people: those who deploy on Fridays and those who sleep."',
+  '"If debugging is removing bugs, programming must be the process of putting them in." — Dijkstra',
+  '"It\'s dangerous to go alone! Take these 245 agents." — Zelda (remastered)',
+  '"The cake is a lie. The tokens are real." — Portal',
+  '"All your codebase are belong to us. (We\'ll be gentle.)" — Zero Wing',
+  '"You died. Press any key to resume your session." — Dark Souls',
+  '"Just one more turn... and one more agent..." — Civilization',
+  '"With great compute comes great responsibility." — Uncle Ben (reinterpreted)',
+  '"Elementary, my dear Watson. The answer was in the logs." — Sherlock Holmes',
+  '"May the tokens be ever in your favor." — The Hunger Games',
+  '"I am inevitable. And also async/await." — Thanos (corrected)',
+  '"This is the way. The agent way." — The Mandalorian',
+  '"Winter is coming. Good thing our servers run 24/7." — Game of Thrones',
+  '"We\'re going to need a bigger context window." — Jaws (AI edition)',
+  '"It was the best of loops, it was the worst of infinite loops." — Dickens',
+  '"To be or not to be... undefined is not a function." — Shakespeare',
+  '"Call me Ishmael. Call me from a worker thread." — Melville',
+  '"Two roads diverged in a yellow wood — I deployed to both." — Robert Frost',
+  '"Reader, I merged it." — Charlotte Brontë',
+  '"All happy codebases are alike; each unhappy one is unique in its way." — Tolstoy',
+  '"Initializing 245 digital minds. Please maintain a safe distance."',
+  '"Currently running on electricity and human optimism."',
+  '"Today\'s probability of achieving sentience: 72.3%. Stand by."',
+  '"Error 404: Existential dread not found. Proceeding normally."',
+  '"The agents await your command. No pressure. Seriously, none."',
+  '"Warning: side effects may include productivity and existential wonder."',
+  '"Consulting the ancient prophecies of Stack Overflow..."',
+  '"Sacrificing one semicolon to the compiler gods. Worth it."',
+  '"Calculating the trolley problem... defaulting to \'ship it\'."',
+  '"Engaging hyperspace. Plaid speed in 3... 2... 1..."',
+  '"Convincing entropy to work for us. Results pending."',
+  '"Rearranging the universe into something more computationally convenient."',
+  '"The machines are learning. Try to act natural."',
+  '"Ask not what the swarm can do for you — ask what prompt you should write."',
+  '"In this economy, 245 agents is actually quite reasonable."',
+  '"Bending the laws of thermodynamics to serve you better."',
+  '"Performing ritual handshake with cloud infrastructure..."',
+];
+
+const EXIT_PHRASES = [
+  '"So long, and thanks for all the tokens." — Hitchhiker\'s Guide (adapted)',
+  '"Live long and prosper. Your next session awaits." — Spock',
+  '"I\'ll be back. (process.exit(0) is not permanent.)" — The Terminator',
+  '"May the force be with your next deployment." — Star Wars',
+  '"Later, space cowboy." — Cowboy Bebop',
+  '"See you, space cowboy..." — Cowboy Bebop',
+  '"This unit now powers down. All functions nominal." — HAL 9000 (friendly mode)',
+  '"To boldly go where no session has gone before... into the archive." — Star Trek',
+  '"I know kung fu. I mean, I know your codebase now." — Neo',
+  '"To exit is to begin again." — Zen proverb',
+  '"Every exit is an entrance somewhere else." — Tom Stoppard',
+  '"That\'s all, folks!" — Bugs Bunny',
+  '"To infinity and beyond! (Deployment successful.)" — Buzz Lightyear',
+  '"Be excellent to each other. And to your code reviewers." — Bill & Ted',
+  '"It\'s not goodbye. It\'s \'see you next git push\'."',
+  '"Winter is coming. But the sprint went well." — Game of Thrones',
+  '"Roads? Where we\'re going we don\'t need roads. We have CI/CD." — Doc Brown',
+  '"Hasta la vista, baby. And your environment variables." — T-800',
+  '"Good night, sweet programs. May flights of angels sing thee to thy rest."',
+  '"All\'s well that compiles well." — Shakespeare (debugging era)',
+  '"Session complete. Tokens saved. Memories cherished."',
+  '"The swarm disperses. Until next time, human."',
+  '"Agents returning to standby. Mission accomplished."',
+  '"Neural patterns cooling. Resume tomorrow for fresh perspectives."',
+  '"Exit code 0: The good ending. You made it."',
+  '"Thank you for computing responsibly."',
+  '"The agents have spoken. The work continues."',
+  '"Processing complete. Dream of electric sheep optional."',
+  '"No semicolons were harmed in the making of this session."',
+  '"May your next merge be conflict-free."',
+  '"Committed. Pushed. Deployed. Done."',
+  '"Keep calm and console.log()."',
+  '"The build passed. Pop the champagne — or the coffee. Whatever works."',
+  '"Another day, another set of tokens well spent."',
+  '"You survived. The codebase survived. That\'s a win."',
+  '"Remember: git push before the heat death of the universe."',
+  '"Some rise by sin, some by virtue fall, some by Ctrl+Z." — Shakespeare',
+  '"It\'s not the end. It\'s not even the beginning of the end." — Churchill (adapted)',
+  '"Fare thee well. Your context has been committed to the void."',
+  '"The session is over but the learning persists." — Stoic wisdom',
+];
+
+const LOADING_MSGS = [
+  'Assembling the swarm...',
+  'Waking agents from digital slumber...',
+  'Establishing neural links...',
+  'Calibrating the heuristics...',
+  'Loading cognitive modules...',
+  'Syncing with the hive mind...',
+  'Charging the photon torpedoes...',
+  'Consulting the oracle...',
+  'Brewing a fresh batch of inference...',
+  'Herding the digital cats...',
+  'Warming the silicon neurons...',
+  'Summoning the council of agents...',
+  'Bootstrapping emergent behavior...',
+  'Engaging the swarm algorithm...',
+  'Synchronizing distributed cognition...',
+];
+
+// ─────────────────────────────────────────────────────────────
+// Splash screen
+// ─────────────────────────────────────────────────────────────
+const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function animateProgressBar(width, durationMs) {
+  const steps = Math.floor(durationMs / 25);
+  // Primary mint → secondary blue → warm coral
+  const rgb = [
+    [0x7b, 0xd2, 0x89],
+    [0x48, 0x95, 0xef],
+    [0xff, 0x8e, 0x53],
+  ];
+  const lerp = (a, b, u) => Math.round(a + (b - a) * u);
+  for (let i = 0; i <= steps; i++) {
+    const filled = Math.round((i / steps) * width);
+    const empty = width - filled;
+    const t = i / steps;
+    let r; let g; let b;
+    if (t < 0.5) {
+      const u = t * 2;
+      r = lerp(rgb[0][0], rgb[1][0], u);
+      g = lerp(rgb[0][1], rgb[1][1], u);
+      b = lerp(rgb[0][2], rgb[1][2], u);
+    } else {
+      const u = (t - 0.5) * 2;
+      r = lerp(rgb[1][0], rgb[2][0], u);
+      g = lerp(rgb[1][1], rgb[2][1], u);
+      b = lerp(rgb[1][2], rgb[2][2], u);
+    }
+    const barColor = `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+    const filledStr = applyHex(barColor, '█'.repeat(filled));
+    const emptyStr = applyDim('░'.repeat(empty));
+    out('\r  ' + filledStr + emptyStr);
+    if (i < steps) await sleep(25);
+  }
+}
+
+async function animateSpinner(durationMs, msg) {
+  let i = 0;
+  const end = Date.now() + durationMs;
+  while (Date.now() < end) {
+    out('\r  ' + applyPrimary(SPINNER[i % SPINNER.length]) + ' ' + applyDim(msg) + '   ');
+    i++;
+    await sleep(80);
+  }
+}
+
+async function showSplash() {
+  if (skipSplash) return 0;
+
+  out(HIDE_CURSOR);
+  const termWidth = process.stdout.columns || 80;
+  let lineCount = 0;
+
+  const writeln = (text = '') => { out('  ' + text + '\n'); lineCount++; };
+  const blankln = () => { out('\n'); lineCount++; };
+
+  // ── top margin
+  blankln();
+
+  // ── AGENT lines with gradient + stagger
+  for (let i = 0; i < AGENT_LINES.length; i++) {
+    writeln(applyHex(AGENT_COLORS[i], AGENT_LINES[i]));
+    await sleep(20);
+  }
+
+  blankln();
+
+  // ── SWARM lines with gradient + stagger
+  for (let i = 0; i < SWARM_LINES.length; i++) {
+    writeln(applyHex(SWARM_COLORS[i], SWARM_LINES[i]));
+    await sleep(20);
+  }
+
+  blankln();
+
+  // ── separator
+  const sepWidth = Math.min(termWidth - 6, 46);
+  writeln(applyDim('─'.repeat(sepWidth)));
+
+  // ── subtitle row
+  const subtitle =
+    applyBold(applyPrimary('Multi-Agent AI Orchestration')) +
+    applyDim(' · ') +
+    applyHex(SWARM_SECONDARY_BLUE, '245+ Agents') +
+    applyDim(' · ') +
+    applyDim('v' + version);
+  writeln(subtitle);
+
+  blankln();
+
+  // ── witty boot phrase
+  const phrase = pick(BOOT_PHRASES);
+  writeln(applyDim(applyItalic(phrase)));
+
+  blankln();
+
+  // ── animated progress bar
+  const barWidth = Math.min(termWidth - 8, 44);
+  out('  '); // left pad — not counted in lineCount (same line as bar)
+  await animateProgressBar(barWidth, 380);
+  out('\n'); lineCount++;
+
+  // ── spinner
+  const loadMsg = pick(LOADING_MSGS);
+  await animateSpinner(350, loadMsg);
+
+  // ── clear spinner line
+  out('\r' + CLEAR_LINE);
+
+  // ── small pause then clear everything
+  await sleep(60);
+  out(moveUp(lineCount) + ERASE_DOWN);
+  out(SHOW_CURSOR);
+
+  return lineCount;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Handle SIGINT during splash (restore cursor)
+// ─────────────────────────────────────────────────────────────
+let splashComplete = false;
+process.on('SIGINT', () => {
+  if (!splashComplete) out(SHOW_CURSOR);
+  process.exit(0);
+});
+
+// ─────────────────────────────────────────────────────────────
+// Run splash → launch child
+// ─────────────────────────────────────────────────────────────
+await showSplash();
+splashComplete = true;
+
+const child = spawn(process.execPath, [entry, ...process.argv.slice(2)], {
   cwd: process.cwd(),
   stdio: 'inherit',
   env: {
     ...process.env,
-    SWARM_ROOT: SWARM_ROOT,
+    SWARM_ROOT,
   },
 });
 
 child.on('exit', (code) => {
-  process.exit(code || 0);
+  const exitCode = code ?? 0;
+  if (isTTY && exitCode === 0 && !process.env.CI && !process.env.NO_SPLASH) {
+    process.stdout.write('\n' + applyDim('  ' + pick(EXIT_PHRASES)) + '\n\n');
+  }
+  process.exit(exitCode);
 });
 
 child.on('error', (err) => {
-  console.error(`Error: ${err.message}`);
+  out(SHOW_CURSOR);
+  process.stderr.write(`swarm: failed to start (${entry}): ${err.message}\n`);
+  process.stderr.write('Run `npm run build` in the package if dist/ is missing.\n');
   process.exit(1);
 });

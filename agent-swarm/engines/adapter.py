@@ -11,11 +11,21 @@ Each engine is just a command template. Add any engine by defining:
 
 import subprocess
 import shutil
+import os
+import sys
 from pathlib import Path
 from typing import Optional
 
 SWARM_ROOT = Path(__file__).parent.parent
 AGENTS_DIR = SWARM_ROOT / "agents"
+
+
+def _user_runtime_dir() -> Path:
+    """Writable dir for temp prompts (global npm install may be read-only)."""
+    base = Path(os.environ.get("SWARM_HOME", Path.home() / ".swarm"))
+    d = base / "memory"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 class BaseEngine:
@@ -30,48 +40,82 @@ class BaseEngine:
     needs_pty: bool = False  # whether this engine needs a pseudo-terminal
     
     @classmethod
-    def build_command(cls, system_prompt: str, task: str) -> list:
-        """Build the command to execute. Uses temp file for long system prompts."""
+    def build_command(cls, system_prompt: str, task: str, *, headless: bool = True) -> list:
+        """Build CLI argv. ``headless`` controls non-interactive / scripting flags on the adapter."""
         # Save system prompt to file to avoid CLI arg length limits
-        prompt_file = SWARM_ROOT / "memory" / f"_prompt_{cls.name}.md"
+        prompt_file = _user_runtime_dir() / f"_prompt_{cls.name}.md"
         prompt_file.parent.mkdir(exist_ok=True)
         prompt_file.write_text(system_prompt)
-        
+
         cmd = cls.command.split()
-        
+
         # Add system prompt via file
         if cls.system_prompt_flag:
             cmd.extend([cls.system_prompt_flag, str(prompt_file)])
-        
-        # Add auto flag if specified
-        if cls.auto_flag:
+
+        # Scripting-only flag (omit when attaching stdio so CLIs can prompt)
+        if cls.auto_flag and headless:
             cmd.append(cls.auto_flag)
-        
+
         # Add task
         if cls.task_position == "end":
             cmd.append(task)
         elif cls.task_position == "after_command":
             cmd = [cmd[0], task] + cmd[1:]
-        
+
         return cmd
-    
+
     @classmethod
-    def run(cls, agent_file: str, task: str, output_dir: str = ".") -> dict:
-        """Execute a task using this engine"""
+    def augment_with_model(cls, argv: list, model: str) -> list:
+        """Inject model flag immediately after executable; override only when CLI differs."""
+        if not argv or not model:
+            return argv
+        return [argv[0], "--model", model] + argv[1:]
+
+    @classmethod
+    def run(
+        cls,
+        agent_file: str,
+        task: str,
+        output_dir: str = ".",
+        *,
+        attach_stdio: bool = False,
+        cli_model: Optional[str] = None,
+    ) -> dict:
+        """Execute agent. With ``attach_stdio``, inherit stdin/stdout/stderr for passwords and approvals."""
         agent_path = AGENTS_DIR / agent_file
-        
+
         if not agent_path.exists():
             return {
                 "stdout": "",
                 "stderr": f"Agent file not found: {agent_file}",
                 "returncode": 1
             }
-        
+
         system_prompt = agent_path.read_text()
-        cmd = cls.build_command(system_prompt, task)
-        
+        cmd = cls.build_command(system_prompt, task, headless=not attach_stdio)
+        mn = (cli_model or "").strip()
+        if mn:
+            cmd = cls.augment_with_model(cmd, mn)
+
         try:
-            result = subprocess.run(
+            if attach_stdio:
+                proc = subprocess.run(
+                    cmd,
+                    cwd=output_dir,
+                    timeout=cls.timeout,
+                    stdin=sys.stdin,
+                    stdout=sys.stdout,
+                    stderr=sys.stderr,
+                )
+                return {
+                    "stdout": "",
+                    "stderr": "",
+                    "returncode": proc.returncode,
+                    "command": " ".join(cmd),
+                    "attached_stdio": True,
+                }
+            proc = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
@@ -79,9 +123,9 @@ class BaseEngine:
                 cwd=output_dir
             )
             return {
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "returncode": result.returncode,
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+                "returncode": proc.returncode,
                 "command": " ".join(cmd)
             }
         except subprocess.TimeoutExpired:
@@ -118,44 +162,18 @@ class GeminiCLIEngine(BaseEngine):
     command = "gemini"
     system_prompt_flag = None
     auto_flag = None
-    
+
     @classmethod
-    def build_command(cls, system_prompt: str, task: str) -> list:
-        # Gemini -p takes prompt as argument, but long prompts break
-        # Use -p for headless mode, combine system prompt with task
-        full_prompt = f"{system_prompt}\n\n---\n\nYour task: {task}\n\nComplete the task and return your results."
-        return ["gemini", "-p", full_prompt]
-    
+    def augment_with_model(cls, argv: list, model: str) -> list:
+        if not argv or not model:
+            return argv
+        return [argv[0], "-m", model] + argv[1:]
+
     @classmethod
-    def run(cls, agent_file: str, task: str, output_dir: str = ".") -> dict:
-        """Run with stdin pipe to avoid shell escaping issues"""
-        import os as _os
-        agent_path = AGENTS_DIR / agent_file
-        if not agent_path.exists():
-            return {"stdout": "", "stderr": f"Agent file not found: {agent_file}", "returncode": 1}
-        
-        system_prompt = agent_path.read_text()
+    def build_command(cls, system_prompt: str, task: str, *, headless: bool = True) -> list:
         full_prompt = f"{system_prompt}\n\n---\n\nYour task: {task}\n\nComplete the task and return your results."
-        
-        import subprocess
-        try:
-            result = subprocess.run(
-                ["gemini", "-p", full_prompt],
-                capture_output=True,
-                text=True,
-                timeout=cls.timeout,
-                cwd=output_dir
-            )
-            return {
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "returncode": result.returncode,
-                "command": f"gemini -p '<prompt>'"
-            }
-        except subprocess.TimeoutExpired:
-            return {"stdout": "", "stderr": f"Timed out after {cls.timeout}s", "returncode": 124, "command": ""}
-        except Exception as e:
-            return {"stdout": "", "stderr": str(e), "returncode": 1, "command": ""}
+        # -p = headless; -i = run prompt then stay interactive (passwords / follow-ups)
+        return ["gemini", "-p" if headless else "-i", full_prompt]
 
 
 class KiloCodeEngine(BaseEngine):
@@ -164,13 +182,24 @@ class KiloCodeEngine(BaseEngine):
     command = "kilo"
     system_prompt_flag = None
     auto_flag = "--auto"
-    
+
     @classmethod
-    def build_command(cls, system_prompt: str, task: str) -> list:
+    def augment_with_model(cls, argv: list, model: str) -> list:
+        if not argv or not model:
+            return argv
+        if len(argv) >= 2 and argv[1] == "run":
+            return ["kilo", "run", "--model", model] + argv[2:]
+        return [argv[0], "--model", model] + argv[1:]
+
+    @classmethod
+    def build_command(cls, system_prompt: str, task: str, *, headless: bool = True) -> list:
         # Combine system prompt and task into one message
-        # Keep it concise to avoid token waste
         prompt = f"{system_prompt}\n\n---\n\nYour task: {task}\n\nComplete the task and return your results."
-        return ["kilo", "run", "--auto", prompt]
+        cmd = ["kilo", "run"]
+        if headless:
+            cmd.append("--auto")
+        cmd.append(prompt)
+        return cmd
 
 
 class CodexEngine(BaseEngine):
@@ -178,11 +207,22 @@ class CodexEngine(BaseEngine):
     name = "codex"
     command = "codex"
     system_prompt_flag = None
-    
+    auto_flag = ""  # quiet is not a reusable auto_flag; handled in build_command
+
     @classmethod
-    def build_command(cls, system_prompt: str, task: str) -> list:
+    def augment_with_model(cls, argv: list, model: str) -> list:
+        if not argv or not model:
+            return argv
+        return [argv[0], "-m", model] + argv[1:]
+
+    @classmethod
+    def build_command(cls, system_prompt: str, task: str, *, headless: bool = True) -> list:
         full_prompt = f"SYSTEM:\n{system_prompt}\n\nTASK:\n{task}"
-        return ["codex", "--quiet", full_prompt]
+        cmd = ["codex"]
+        if headless:
+            cmd.append("--quiet")
+        cmd.append(full_prompt)
+        return cmd
 
 
 class CursorAgentEngine(BaseEngine):
@@ -190,10 +230,21 @@ class CursorAgentEngine(BaseEngine):
     name = "cursor"
     command = "cursor-agent"
     system_prompt_flag = None
-    
+
     @classmethod
-    def build_command(cls, system_prompt: str, task: str) -> list:
-        return ["cursor-agent", "-p", f"{system_prompt}\n\n{task}"]
+    def augment_with_model(cls, argv: list, model: str) -> list:
+        if not argv or not model:
+            return argv
+        return [argv[0], "-m", model] + argv[1:]
+
+    @classmethod
+    def build_command(cls, system_prompt: str, task: str, *, headless: bool = True) -> list:
+        msg = f"{system_prompt}\n\n{task}"
+        cmd = ["cursor-agent"]
+        if headless:
+            cmd.append("-p")
+        cmd.append(msg)
+        return cmd
 
 
 class AiderEngine(BaseEngine):
@@ -201,11 +252,16 @@ class AiderEngine(BaseEngine):
     name = "aider"
     command = "aider"
     system_prompt_flag = None
-    auto_flag = "--yes"
+    auto_flag = ""
     
     @classmethod
-    def build_command(cls, system_prompt: str, task: str) -> list:
-        return ["aider", "--yes", "--message", f"{system_prompt}\n\n{task}"]
+    def build_command(cls, system_prompt: str, task: str, *, headless: bool = True) -> list:
+        msg = f"{system_prompt}\n\n{task}"
+        cmd = ["aider"]
+        if headless:
+            cmd.append("--yes")
+        cmd.extend(["--message", msg])
+        return cmd
 
 
 class WindsurfEngine(BaseEngine):
@@ -222,7 +278,7 @@ class CopilotEngine(BaseEngine):
     system_prompt_flag = None
     
     @classmethod
-    def build_command(cls, system_prompt: str, task: str) -> list:
+    def build_command(cls, system_prompt: str, task: str, *, headless: bool = True) -> list:
         return ["gh", "copilot", "suggest", f"{system_prompt}\n\n{task}"]
 
 
@@ -233,7 +289,7 @@ class OpenCodeEngine(BaseEngine):
     system_prompt_flag = None
     
     @classmethod
-    def build_command(cls, system_prompt: str, task: str) -> list:
+    def build_command(cls, system_prompt: str, task: str, *, headless: bool = True) -> list:
         return ["opencode", "run", f"{system_prompt}\n\n{task}"]
 
 
@@ -283,9 +339,18 @@ ENGINES = {
 }
 
 
+_ENGINE_ALIASES = {
+    "kilo": "kilocode",
+}
+
+
 def get_engine(name: str) -> Optional[BaseEngine]:
-    """Get an engine by name"""
-    return ENGINES.get(name.lower())
+    """Get engine by registry name or common alias (e.g. kilo → kilocode)."""
+    if not name:
+        return None
+    key = name.lower().strip()
+    key = _ENGINE_ALIASES.get(key, key)
+    return ENGINES.get(key)
 
 
 def register_engine(name: str, engine_class: type):

@@ -1070,7 +1070,7 @@ MODELS = {
     "claude-sonnet": "claude-sonnet-4-20250514",
     "claude-opus": "claude-opus-4-20250514",
     "claude-3-5": "claude-3-5-sonnet-20241022",
-    "gemini": "gemini-2.5-flash",
+    "gemini": "gemini-2.0-flash",
     "gpt-4": "gpt-4",
 }
 

@@ -27,17 +27,16 @@
  * Clipboard via `pbcopy`/`pbpaste`. No Electron `clipboard` module.
  */
 
-import type {
-  ComputerExecutor,
-  DisplayGeometry,
-  FrontmostApp,
-  InstalledApp,
-  ResolvePrepareCaptureResult,
-  RunningApp,
-  ScreenshotResult,
-} from '@ant/computer-use-mcp'
+const API_RESIZE_PARAMS = { max_width: 1024, max_height: 768 };
+const targetImageSize = (w: number, h: number) => [w, h];
+type ComputerExecutor = any;
+type DisplayGeometry = any;
+type FrontmostApp = any;
+type InstalledApp = any;
+type ResolvePrepareCaptureResult = any;
+type RunningApp = any;
+type ScreenshotResult = any;
 
-import { API_RESIZE_PARAMS, targetImageSize } from '@ant/computer-use-mcp'
 import { logForDebugging } from '../debug.js'
 import { errorMessage } from '../errors.js'
 import { execFileNoThrow } from '../execFileNoThrow.js'

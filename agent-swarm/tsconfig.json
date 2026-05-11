@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "ignoreDeprecations": "6.0",
     "target": "ESNext",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
@@ -10,6 +11,11 @@
     "forceConsistentCasingInFileNames": true,
     "outDir": "dist",
     "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "bun:bundle": ["src/bun-mock.ts"],
+      "src/*": ["./src/*"]
+    },
     "jsx": "react",
     "allowJs": true,
     "noImplicitAny": false

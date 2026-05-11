@@ -1,6 +1,9 @@
 import chalk from 'chalk';
 import figures from 'figures';
 import * as React from 'react';
+
+declare const MACRO: any;
+
 import { color, Text } from '../ink.js';
 import type { MCPServerConnection } from '../services/mcp/types.js';
 import { getAccountInformation, isClaudeAISubscriber } from './auth.js';
