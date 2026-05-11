@@ -110,8 +110,8 @@ class PolicyEvaluator:
             decision = policy.effect
             reason = f"Policy '{policy.name}' applied with effect {policy.effect}"
 
-            # Explicit DENY wins immediately.
-            if policy.effect == PolicyEffect.DENY:
+            # DENY and THROTTLE win immediately — lower-priority policies cannot override.
+            if policy.effect in (PolicyEffect.DENY, PolicyEffect.THROTTLE):
                 break
 
         elapsed_ms = int(
@@ -128,7 +128,7 @@ class PolicyEvaluator:
             execution_time_ms=elapsed_ms,
         )
 
-        if applying_policy and decision in (PolicyEffect.ALLOW, PolicyEffect.DENY):
+        if applying_policy and decision in (PolicyEffect.ALLOW, PolicyEffect.DENY, PolicyEffect.THROTTLE):
             applying_policy.increment_calls()
 
         return decision, applying_policy, reason
@@ -272,6 +272,13 @@ def enforce_policy(resource=None, action=None):
             if decision == PolicyEffect.DENY:
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied(f"Policy denied: {reason}")
+
+            if decision == PolicyEffect.THROTTLE:
+                from django.http import JsonResponse
+                return JsonResponse(
+                    {"error": f"Rate limited: {reason}", "retry_after_seconds": 30},
+                    status=429,
+                )
 
             # ESCALATE: approval workflow not yet implemented.
             # Fall through for ALLOW / AUDIT.
