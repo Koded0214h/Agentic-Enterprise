@@ -12,6 +12,7 @@ class PolicyEffect(models.TextChoices):
     DENY = "DENY", _("Deny")
     AUDIT = "AUDIT", _("Audit Only")
     ESCALATE = "ESCALATE", _("Require Approval")
+    THROTTLE = "THROTTLE", _("Throttle")
 
 
 class PolicyResource(models.TextChoices):
@@ -178,6 +179,7 @@ class PolicyAuditLog(models.Model):
         ("DENY", "Denied"),
         ("AUDIT", "Audited"),
         ("ESCALATE", "Escalated"),
+        ("THROTTLE", "Throttled"),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

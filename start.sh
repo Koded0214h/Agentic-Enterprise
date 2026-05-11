@@ -64,7 +64,7 @@ status_all() {
 # ── Prerequisites ─────────────────────────────────────────────────────────────
 command -v python3 >/dev/null || error "python3 not found"
 command -v curl    >/dev/null || error "curl not found"
-[[ -f "$BACKEND_DIR/.venv/bin/activate" ]] || error "Backend venv missing. Run: python3 -m venv $BACKEND_DIR/.venv && pip install -r $BACKEND_DIR/requirements.txt"
+[[ -f "$BACKEND_DIR/.venv/bin/activate" ]] || error "Backend venv missing. Run: $BACKEND_DIR/bootstrap-venv.sh   (or create .venv and install torch then requirements — see docs/setup.md)"
 
 mkdir -p "$LOG_DIR"
 > "$PID_FILE"

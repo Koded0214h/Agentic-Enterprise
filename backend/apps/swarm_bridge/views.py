@@ -230,13 +230,16 @@ class SwarmPolicyCheckView(APIView):
         ctx.policy_reason = reason
         ctx.save(update_fields=["policy_decision", "policy_reason"])
 
-        return Response({
+        response_data = {
             "decision": decision,
             "reason": reason,
             "policy_id": policy_id,
             "pending_action_id": pending_action_id,
             "execution_id": str(execution_id),
-        })
+        }
+        if decision == "throttle":
+            response_data["retry_after_seconds"] = 30
+        return Response(response_data)
 
 
 # ---------------------------------------------------------------------------
