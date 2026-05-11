@@ -1053,11 +1053,18 @@ async function handleSpawn(
   try {
     await detectAndGetBackend()
   } catch (error) {
-    // Only fall back silently in auto mode. If the user explicitly configured
-    // teammateMode: 'tmux', let the error propagate so they see the actionable
-    // install instructions from getTmuxInstallInstructions().
-    if (getTeammateModeFromSnapshot() !== 'auto') {
+    const mode = getTeammateModeFromSnapshot()
+    // Native Windows has no tmux split panes — always fall back to in-process teammates instead of forcing WSL.
+    const nativeWindowsTmuxFallback = mode === 'tmux' && process.platform === 'win32'
+
+    // Only fall back silently in auto mode (or tmux-mode on native Windows above).
+    if (mode !== 'auto' && !nativeWindowsTmuxFallback) {
       throw error
+    }
+    if (nativeWindowsTmuxFallback) {
+      logForDebugging(
+        '[handleSpawn] Native Windows: no pane backend — running teammates in-process (tmux splits need WSL/Linux/macOS)',
+      )
     }
     logForDebugging(
       `[handleSpawn] No pane backend available, falling back to in-process: ${errorMessage(error)}`,

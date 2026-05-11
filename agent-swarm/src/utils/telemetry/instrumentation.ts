@@ -4,10 +4,10 @@ import { logs } from '@opentelemetry/api-logs'
 // switch statements below. A process uses at most one protocol variant per
 // signal, but static imports would load all 6 (~1.2MB) on every startup.
 import {
+  Resource,
   envDetector,
   hostDetector,
   osDetector,
-  resourceFromAttributes,
 } from '@opentelemetry/resources'
 import {
   BatchLogRecordProcessor,
@@ -25,8 +25,8 @@ import {
   ConsoleSpanExporter,
 } from '@opentelemetry/sdk-trace-base'
 import {
-  ATTR_SERVICE_NAME,
-  ATTR_SERVICE_VERSION,
+  SEMRESATTRS_SERVICE_NAME,
+  SEMRESATTRS_SERVICE_VERSION,
   SEMRESATTRS_HOST_ARCH,
 } from '@opentelemetry/semantic-conventions'
 import { HttpsProxyAgent } from 'https-proxy-agent'
@@ -351,7 +351,7 @@ function isBigQueryMetricsEnabled() {
  * Uses BETA_TRACING_ENDPOINT instead of OTEL_EXPORTER_OTLP_ENDPOINT.
  */
 async function initializeBetaTracing(
-  resource: ReturnType<typeof resourceFromAttributes>,
+  resource: Resource,
 ): Promise<void> {
   const endpoint = process.env.BETA_TRACING_ENDPOINT
   if (!endpoint) {
@@ -471,8 +471,8 @@ export async function initializeTelemetry() {
   // Create base resource with service attributes
   const platform = getPlatform()
   const baseAttributes: Record<string, string> = {
-    [ATTR_SERVICE_NAME]: 'claude-code',
-    [ATTR_SERVICE_VERSION]: MACRO.VERSION,
+    [SEMRESATTRS_SERVICE_NAME]: 'claude-code',
+    [SEMRESATTRS_SERVICE_VERSION]: MACRO.VERSION,
   }
 
   // Add WSL-specific attributes if running on WSL
@@ -483,10 +483,10 @@ export async function initializeTelemetry() {
     }
   }
 
-  const baseResource = resourceFromAttributes(baseAttributes)
+  const baseResource = new Resource(baseAttributes)
 
   // Use OpenTelemetry detectors
-  const osResource = resourceFromAttributes(
+  const osResource = new Resource(
     osDetector.detect().attributes || {},
   )
 
@@ -497,9 +497,9 @@ export async function initializeTelemetry() {
         [SEMRESATTRS_HOST_ARCH]: hostDetected.attributes[SEMRESATTRS_HOST_ARCH],
       }
     : {}
-  const hostArchResource = resourceFromAttributes(hostArchAttributes)
+  const hostArchResource = new Resource(hostArchAttributes)
 
-  const envResource = resourceFromAttributes(
+  const envResource = new Resource(
     envDetector.detect().attributes || {},
   )
 

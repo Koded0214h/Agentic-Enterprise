@@ -273,10 +273,11 @@ Then start a tmux session with: tmux new-session -s claude`
 Then start a tmux session with: tmux new-session -s claude`
 
     case 'windows':
-      return `To use agent swarms, you need tmux which requires WSL (Windows Subsystem for Linux).
-Install WSL first, then inside WSL run:
+      return `On native Windows, teammates run in-process (see Settings → teammate mode → Auto).
+
+If you explicitly want tiled terminal panes, install WSL or Linux and use swarm there with tmux:
   sudo apt install tmux
-Then start a tmux session with: tmux new-session -s claude`
+  tmux new-session -s claude`
 
     default:
       return `To use agent swarms, install tmux using your system's package manager.

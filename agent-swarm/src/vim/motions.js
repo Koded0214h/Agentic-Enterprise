@@ -1,0 +1,78 @@
+"use strict";
+/**
+ * Vim Motion Functions
+ *
+ * Pure functions for resolving vim motions to cursor positions.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.resolveMotion = resolveMotion;
+exports.isInclusiveMotion = isInclusiveMotion;
+exports.isLinewiseMotion = isLinewiseMotion;
+/**
+ * Resolve a motion to a target cursor position.
+ * Does not modify anything - pure calculation.
+ */
+function resolveMotion(key, cursor, count) {
+    var result = cursor;
+    for (var i = 0; i < count; i++) {
+        var next = applySingleMotion(key, result);
+        if (next.equals(result))
+            break;
+        result = next;
+    }
+    return result;
+}
+/**
+ * Apply a single motion step.
+ */
+function applySingleMotion(key, cursor) {
+    switch (key) {
+        case 'h':
+            return cursor.left();
+        case 'l':
+            return cursor.right();
+        case 'j':
+            return cursor.downLogicalLine();
+        case 'k':
+            return cursor.upLogicalLine();
+        case 'gj':
+            return cursor.down();
+        case 'gk':
+            return cursor.up();
+        case 'w':
+            return cursor.nextVimWord();
+        case 'b':
+            return cursor.prevVimWord();
+        case 'e':
+            return cursor.endOfVimWord();
+        case 'W':
+            return cursor.nextWORD();
+        case 'B':
+            return cursor.prevWORD();
+        case 'E':
+            return cursor.endOfWORD();
+        case '0':
+            return cursor.startOfLogicalLine();
+        case '^':
+            return cursor.firstNonBlankInLogicalLine();
+        case '$':
+            return cursor.endOfLogicalLine();
+        case 'G':
+            return cursor.startOfLastLine();
+        default:
+            return cursor;
+    }
+}
+/**
+ * Check if a motion is inclusive (includes character at destination).
+ */
+function isInclusiveMotion(key) {
+    return 'eE$'.includes(key);
+}
+/**
+ * Check if a motion is linewise (operates on full lines when used with operators).
+ * Note: gj/gk are characterwise exclusive per `:help gj`, not linewise.
+ */
+function isLinewiseMotion(key) {
+    return 'jkG'.includes(key) || key === 'gg';
+}

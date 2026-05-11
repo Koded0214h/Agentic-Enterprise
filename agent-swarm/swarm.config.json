@@ -1220,6 +1220,11 @@
       "engine": null,
       "source": "paid-media"
     },
+    "brief-synthesizer": {
+      "file": "core/brief-synthesizer.md",
+      "engine": null,
+      "source": "core"
+    },
     "questionnaire": {
       "file": "core/questionnaire.md",
       "engine": null,
@@ -1241,6 +1246,37 @@
       "source": "creative"
     }
   },
+  "mcpServers": {},
+  "file_context": {
+    "enabled": true,
+    "show_instruction": null,
+    "max_total_chars": 220000,
+    "max_text_chars_per_file": 100000,
+    "max_image_base64_chars": 380000,
+    "auto_backtick_paths": false
+  },
   "parallel_max_workers": 8,
+  "network": {
+    "strategy": "respect_system_proxy_and_explicit_config",
+    "mode": "normal",
+    "gateway_connect_timeout_seconds": 30,
+    "gateway_poll_timeout_seconds": 10,
+    "proxy": {
+      "http": null,
+      "https": null,
+      "no_proxy": null
+    }
+  },
+  "security": {
+    "commands": {
+      "auto_approve_levels": ["safe", "moderate"],
+      "confirm_risky_commands": true,
+      "comment_risky": "Risky/destructive shell patterns require TTY confirmation. Emergency bypass only: SWARM_AUTO_APPROVE_DANGEROUS=1"
+    },
+    "mcp": {
+      "verify_server_digest": true,
+      "comment_mcp": "SHA-256 pins per server live in ~/.swarm/mcp-server-digests.json. Set verify_server_digest to false only in emergencies."
+    }
+  },
   "timeout_seconds": 600
 }

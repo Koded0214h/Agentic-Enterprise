@@ -6,11 +6,11 @@
  */
 
 import path from 'path';
-import { homedir } from 'os';
 import { unlinkSync } from 'fs';
 import { SessionStore } from '../sqlite/SessionStore.js';
 import { logger } from '../../utils/logger.js';
 import { getProjectName } from '../../utils/project-name.js';
+import { MARKETPLACE_ROOT } from '../../shared/paths.js';
 
 import type { ContextInput, ContextConfig, Observation, SessionSummary } from './types.js';
 import { loadContextConfig } from './ContextConfigLoader.js';
@@ -32,16 +32,20 @@ import { renderPreviouslySection, renderFooter } from './sections/FooterRenderer
 import { renderMarkdownEmptyState } from './formatters/MarkdownFormatter.js';
 import { renderColorEmptyState } from './formatters/ColorFormatter.js';
 
-// Version marker path for native module error handling
-const VERSION_MARKER_PATH = path.join(
-  homedir(),
-  '.claude',
-  'plugins',
-  'marketplaces',
-  'thedotmack',
-  'plugin',
-  '.install-version'
-);
+/** Matches BranchManager / npm lifecycle: ~/.claude/plugins/marketplaces/thedotmack/.install-version */
+const INSTALL_VERSION_MARKER = path.join(MARKETPLACE_ROOT, '.install-version');
+/** Legacy location (pre-unified marker); remove during recovery so reinstall picks correct layout */
+const LEGACY_INSTALL_VERSION_MARKER = path.join(MARKETPLACE_ROOT, 'plugin', '.install-version');
+
+function unlinkInstallVersionMarkers(): void {
+  for (const markerPath of [INSTALL_VERSION_MARKER, LEGACY_INSTALL_VERSION_MARKER]) {
+    try {
+      unlinkSync(markerPath);
+    } catch (unlinkError) {
+      logger.debug('SYSTEM', 'Marker file cleanup failed (may not exist)', {}, unlinkError as Error);
+    }
+  }
+}
 
 /**
  * Initialize database connection with error handling
@@ -51,11 +55,7 @@ function initializeDatabase(): SessionStore | null {
     return new SessionStore();
   } catch (error: any) {
     if (error.code === 'ERR_DLOPEN_FAILED') {
-      try {
-        unlinkSync(VERSION_MARKER_PATH);
-      } catch (unlinkError) {
-        logger.debug('SYSTEM', 'Marker file cleanup failed (may not exist)', {}, unlinkError as Error);
-      }
+      unlinkInstallVersionMarkers();
       logger.error('SYSTEM', 'Native module rebuild needed - restart Claude Code to auto-fix');
       return null;
     }

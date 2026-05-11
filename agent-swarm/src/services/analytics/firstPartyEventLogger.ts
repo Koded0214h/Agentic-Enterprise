@@ -1,12 +1,12 @@
 import type { AnyValueMap, Logger, logs } from '@opentelemetry/api-logs'
-import { resourceFromAttributes } from '@opentelemetry/resources'
+import { Resource } from '@opentelemetry/resources'
 import {
   BatchLogRecordProcessor,
   LoggerProvider,
 } from '@opentelemetry/sdk-logs'
 import {
-  ATTR_SERVICE_NAME,
-  ATTR_SERVICE_VERSION,
+  SEMRESATTRS_SERVICE_NAME,
+  SEMRESATTRS_SERVICE_VERSION,
 } from '@opentelemetry/semantic-conventions'
 import { randomUUID } from 'crypto'
 import { isEqual } from 'lodash-es'
@@ -341,8 +341,8 @@ export function initialize1PEventLogging(): void {
   // Build our own resource for 1P event logging with minimal attributes
   const platform = getPlatform()
   const attributes: Record<string, string> = {
-    [ATTR_SERVICE_NAME]: 'claude-code',
-    [ATTR_SERVICE_VERSION]: MACRO.VERSION,
+    [SEMRESATTRS_SERVICE_NAME]: 'claude-code',
+    [SEMRESATTRS_SERVICE_VERSION]: MACRO.VERSION,
   }
 
   // Add WSL-specific attributes if running on WSL
@@ -353,7 +353,7 @@ export function initialize1PEventLogging(): void {
     }
   }
 
-  const resource = resourceFromAttributes(attributes)
+  const resource = new Resource(attributes)
 
   // Create a new LoggerProvider with the EventLoggingExporter
   // NOTE: This is kept separate from customer telemetry logs to ensure

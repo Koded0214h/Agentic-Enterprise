@@ -1,8 +1,26 @@
 __pycache__/
 *.pyc
+!recovery/*.pyc
+.Python
+venv/
+.venv/
+
 memory/
 output/
 research/
+
+# Local swarm run state / scratch (do not commit)
+.swarm/
+.swarm-output/
+
 .DS_Store
 *.log
+
 .env
+.env.*
+!.env.example
+.env.npm
+
+.npmrc
+
+node_modules/

@@ -1,5 +1,14 @@
 import chalk, { Chalk } from 'chalk'
-import { env } from './env.js'
+
+/**
+ * Apple Terminal true-color handling (matches `env.terminal === 'Apple_Terminal'`
+ * when `TERM_PROGRAM` is the source of the detected terminal name).
+ * Kept local so `theme.ts` can compile in isolation for `build:studio` without
+ * pulling in `env.ts` and the rest of the dependency graph.
+ */
+function useAppleTerminal256ColorChalk(): boolean {
+  return process.env.TERM_PROGRAM === 'Apple_Terminal'
+}
 
 export type Theme = {
   autoAccept: string
@@ -131,8 +140,8 @@ const lightTheme: Theme = {
   inactiveShimmer: 'rgb(142,142,142)', // Lighter gray for shimmer effect
   subtle: 'rgb(175,175,175)', // Light gray
   suggestion: 'rgb(87,105,247)', // Medium blue
-  remember: 'rgb(0,0,255)', // Blue
-  background: 'rgb(0,153,153)', // Cyan
+  remember: 'rgb(37,99,235)', // Secondary blue
+  background: 'rgb(92, 164, 118)', // Swarm primary muted (#7bd289 family)
   success: 'rgb(44,122,57)', // Green
   error: 'rgb(171,43,63)', // Red
   warning: 'rgb(150,108,30)', // Amber
@@ -152,7 +161,7 @@ const lightTheme: Theme = {
   purple_FOR_SUBAGENTS_ONLY: 'rgb(147,51,234)', // Purple 600
   orange_FOR_SUBAGENTS_ONLY: 'rgb(234,88,12)', // Orange 600
   pink_FOR_SUBAGENTS_ONLY: 'rgb(219,39,119)', // Pink 600
-  cyan_FOR_SUBAGENTS_ONLY: 'rgb(8,145,178)', // Cyan 600
+  cyan_FOR_SUBAGENTS_ONLY: 'rgb(123,210,137)', // Swarm primary (#7bd289)
   // Grove colors
   professionalBlue: 'rgb(106,155,204)',
   // Chrome colors
@@ -214,7 +223,7 @@ const lightAnsiTheme: Theme = {
   subtle: 'ansi:blackBright',
   suggestion: 'ansi:blue',
   remember: 'ansi:blue',
-  background: 'ansi:cyan',
+  background: 'ansi:greenBright',
   success: 'ansi:green',
   error: 'ansi:red',
   warning: 'ansi:yellow',
@@ -234,7 +243,7 @@ const lightAnsiTheme: Theme = {
   purple_FOR_SUBAGENTS_ONLY: 'ansi:magenta',
   orange_FOR_SUBAGENTS_ONLY: 'ansi:redBright',
   pink_FOR_SUBAGENTS_ONLY: 'ansi:magentaBright',
-  cyan_FOR_SUBAGENTS_ONLY: 'ansi:cyan',
+  cyan_FOR_SUBAGENTS_ONLY: 'ansi:greenBright',
   // Grove colors
   professionalBlue: 'ansi:blueBright',
   // Chrome colors
@@ -295,7 +304,7 @@ const darkAnsiTheme: Theme = {
   subtle: 'ansi:white',
   suggestion: 'ansi:blueBright',
   remember: 'ansi:blueBright',
-  background: 'ansi:cyanBright',
+  background: 'ansi:greenBright',
   success: 'ansi:greenBright',
   error: 'ansi:redBright',
   warning: 'ansi:yellowBright',
@@ -315,7 +324,7 @@ const darkAnsiTheme: Theme = {
   purple_FOR_SUBAGENTS_ONLY: 'ansi:magentaBright',
   orange_FOR_SUBAGENTS_ONLY: 'ansi:redBright',
   pink_FOR_SUBAGENTS_ONLY: 'ansi:magentaBright',
-  cyan_FOR_SUBAGENTS_ONLY: 'ansi:cyanBright',
+  cyan_FOR_SUBAGENTS_ONLY: 'ansi:greenBright',
   // Grove colors
   professionalBlue: 'rgb(106,155,204)',
   // Chrome colors
@@ -376,7 +385,7 @@ const lightDaltonizedTheme: Theme = {
   subtle: 'rgb(175,175,175)', // Light gray
   suggestion: 'rgb(51,102,255)', // Bright blue
   remember: 'rgb(51,102,255)', // Bright blue
-  background: 'rgb(0,153,153)', // Cyan (color-blind friendly)
+  background: 'rgb(92, 148, 110)', // Swarm primary muted (daltonized light)
   success: 'rgb(0,102,153)', // Blue instead of green for deuteranopia
   error: 'rgb(204,0,0)', // Pure red for better distinction
   warning: 'rgb(255,153,0)', // Orange adjusted for deuteranopia
@@ -396,7 +405,7 @@ const lightDaltonizedTheme: Theme = {
   purple_FOR_SUBAGENTS_ONLY: 'rgb(128,0,128)', // True purple
   orange_FOR_SUBAGENTS_ONLY: 'rgb(255,128,0)', // True orange
   pink_FOR_SUBAGENTS_ONLY: 'rgb(255,102,178)', // Adjusted pink
-  cyan_FOR_SUBAGENTS_ONLY: 'rgb(0,178,178)', // Adjusted cyan
+  cyan_FOR_SUBAGENTS_ONLY: 'rgb(123,210,137)', // Swarm primary (#7bd289)
   // Grove colors
   professionalBlue: 'rgb(106,155,204)',
   // Chrome colors
@@ -457,7 +466,7 @@ const darkTheme: Theme = {
   subtle: 'rgb(80,80,80)', // Dark gray
   suggestion: 'rgb(177,185,249)', // Light blue-purple
   remember: 'rgb(177,185,249)', // Light blue-purple
-  background: 'rgb(0,204,204)', // Bright cyan
+  background: 'rgb(58, 128, 86)', // Swarm primary (dark BG chrome)
   success: 'rgb(78,186,101)', // Bright green
   error: 'rgb(255,107,128)', // Bright red
   warning: 'rgb(255,193,7)', // Bright amber
@@ -477,7 +486,7 @@ const darkTheme: Theme = {
   purple_FOR_SUBAGENTS_ONLY: 'rgb(147,51,234)', // Purple 600
   orange_FOR_SUBAGENTS_ONLY: 'rgb(234,88,12)', // Orange 600
   pink_FOR_SUBAGENTS_ONLY: 'rgb(219,39,119)', // Pink 600
-  cyan_FOR_SUBAGENTS_ONLY: 'rgb(8,145,178)', // Cyan 600
+  cyan_FOR_SUBAGENTS_ONLY: 'rgb(123,210,137)', // Swarm primary (#7bd289)
   // Grove colors
   professionalBlue: 'rgb(106,155,204)',
   // Chrome colors
@@ -538,7 +547,7 @@ const darkDaltonizedTheme: Theme = {
   subtle: 'rgb(80,80,80)', // Dark gray
   suggestion: 'rgb(153,204,255)', // Light blue
   remember: 'rgb(153,204,255)', // Light blue
-  background: 'rgb(0,204,204)', // Bright cyan (color-blind friendly)
+  background: 'rgb(58, 128, 86)', // Swarm primary (dark daltonized chrome)
   success: 'rgb(51,153,255)', // Blue instead of green
   error: 'rgb(255,102,102)', // Bright red
   warning: 'rgb(255,204,0)', // Yellow-orange for deuteranopia
@@ -558,7 +567,7 @@ const darkDaltonizedTheme: Theme = {
   purple_FOR_SUBAGENTS_ONLY: 'rgb(178,102,255)', // Bright purple
   orange_FOR_SUBAGENTS_ONLY: 'rgb(255,178,102)', // Bright orange
   pink_FOR_SUBAGENTS_ONLY: 'rgb(255,153,204)', // Bright pink
-  cyan_FOR_SUBAGENTS_ONLY: 'rgb(102,204,204)', // Bright cyan
+  cyan_FOR_SUBAGENTS_ONLY: 'rgb(123,210,137)', // Swarm primary (#7bd289)
   // Grove colors
   professionalBlue: 'rgb(106,155,204)',
   // Chrome colors
@@ -614,10 +623,9 @@ export function getTheme(themeName: ThemeName): Theme {
 
 // Create a chalk instance with 256-color level for Apple Terminal
 // Apple Terminal doesn't handle 24-bit color escape sequences well
-const chalkForChart =
-  env.terminal === 'Apple_Terminal'
-    ? new Chalk({ level: 2 }) // 256 colors
-    : chalk
+const chalkForChart = useAppleTerminal256ColorChalk()
+  ? new Chalk({ level: 2 }) // 256 colors
+  : chalk
 
 /**
  * Converts a theme color to an ANSI escape sequence for use with asciichart.
