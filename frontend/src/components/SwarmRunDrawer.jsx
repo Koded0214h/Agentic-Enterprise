@@ -6,6 +6,12 @@ import './SwarmRunDrawer.css'
 
 const ENGINES = ['claude', 'gemini', 'codex']
 
+const SPEEDS = [
+  { id: 'haiku',  label: 'Fast',     desc: 'Haiku — quickest results'   },
+  { id: 'sonnet', label: 'Balanced', desc: 'Sonnet — quality + speed'   },
+  { id: 'opus',   label: 'Deep',     desc: 'Opus — most thorough'        },
+]
+
 const TYPED_GOALS = [
   'Build a B2B SaaS for construction project management',
   'Launch an AI-powered marketplace for freelance legal services',
@@ -17,6 +23,7 @@ const TYPED_GOALS = [
 export default function SwarmRunDrawer({ open, onClose }) {
   const [goal, setGoal] = useState('')
   const [engine, setEngine] = useState('claude')
+  const [speed, setSpeed] = useState('sonnet')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [placeholder, setPlaceholder] = useState(TYPED_GOALS[0])
@@ -61,7 +68,7 @@ export default function SwarmRunDrawer({ open, onClose }) {
     setLoading(true)
     setError('')
     try {
-      const data = await api.post('/swarm/run/', { goal: goal.trim(), engine })
+      const data = await api.post('/swarm/run/', { goal: goal.trim(), engine, model: engine === 'claude' ? speed : '' })
       onClose()
       setGoal('')
       navigate(`/app/swarm/${data.run_id}`)
@@ -75,7 +82,7 @@ export default function SwarmRunDrawer({ open, onClose }) {
   function handleClose() {
     if (loading) return
     onClose()
-    setTimeout(() => { setGoal(''); setError('') }, 300)
+    setTimeout(() => { setGoal(''); setError(''); setSpeed('sonnet') }, 300)
   }
 
   return (
@@ -126,6 +133,22 @@ export default function SwarmRunDrawer({ open, onClose }) {
               {loading ? 'Starting…' : 'Launch →'}
             </button>
           </div>
+
+          {engine === 'claude' && (
+            <div className="srd-speed-row">
+              <span className="srd-engine-label">Speed</span>
+              <div className="srd-speed-pills">
+                {SPEEDS.map(s => (
+                  <button key={s.id} type="button"
+                    className={`srd-speed-pill ${speed === s.id ? 'active' : ''}`}
+                    onClick={() => setSpeed(s.id)}
+                    disabled={loading}
+                    title={s.desc}
+                  >{s.label}</button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {error && <p className="srd-error">{error}</p>}
         </form>

@@ -497,17 +497,25 @@ def _stdout_reader(proc, run):
         run["exit_code"] = proc.returncode
 
 
+_CLAUDE_MODEL_MAP = {
+    "haiku":    "claude-haiku-4-5-20251001",
+    "sonnet":   "claude-sonnet-4-6",
+    "opus":     "claude-opus-4-7",
+}
+
+
 class SwarmRunView(APIView):
     """
     POST /api/swarm/run/
     Start an orchestrator run. Returns run_id immediately.
-    Body: { "goal": "...", "engine": "claude" }
+    Body: { "goal": "...", "engine": "claude", "model": "haiku"|"sonnet"|"opus" }
     """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        goal = (request.data.get("goal") or "").strip()
+        goal   = (request.data.get("goal")   or "").strip()
         engine = (request.data.get("engine") or "claude").strip()
+        model  = (request.data.get("model")  or "").strip().lower()
 
         if not goal:
             return Response({"error": "goal is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -522,6 +530,10 @@ class SwarmRunView(APIView):
         run_id = str(uuid.uuid4())
         env = _build_swarm_env()
 
+        # Pass model to ClaudeCodeEngine via env var so it can pass -m to the CLI
+        if engine == "claude" and model in _CLAUDE_MODEL_MAP:
+            env["SWARM_CLAUDE_MODEL"] = _CLAUDE_MODEL_MAP[model]
+
         proc = subprocess.Popen(
             [sys.executable, str(orchestrator), goal, "--engine", engine],
             stdout=subprocess.PIPE,
@@ -533,13 +545,13 @@ class SwarmRunView(APIView):
             env=env,
         )
 
-        run = {"proc": proc, "lines": [], "done": False, "exit_code": None, "goal": goal, "engine": engine}
+        run = {"proc": proc, "lines": [], "done": False, "exit_code": None, "goal": goal, "engine": engine, "model": model}
         _RUNS[run_id] = run
 
         t = threading.Thread(target=_stdout_reader, args=(proc, run), daemon=True)
         t.start()
 
-        return Response({"run_id": run_id, "goal": goal, "engine": engine})
+        return Response({"run_id": run_id, "goal": goal, "engine": engine, "model": model})
 
 
 class SwarmRunStreamView(APIView):
@@ -617,6 +629,7 @@ class SwarmRunStatusView(APIView):
             "run_id": run_id,
             "goal": run["goal"],
             "engine": run["engine"],
+            "model": run.get("model", ""),
             "done": run["done"],
             "exit_code": run["exit_code"],
             "line_count": len(run["lines"]),

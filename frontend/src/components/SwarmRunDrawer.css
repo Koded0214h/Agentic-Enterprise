@@ -210,6 +210,46 @@
   transform: none;
 }
 
+.srd-speed-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.srd-speed-pills {
+  display: flex;
+  gap: 4px;
+}
+
+.srd-speed-pill {
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border-2);
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.srd-speed-pill:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.srd-speed-pill.active {
+  background: rgba(170, 59, 255, 0.15);
+  border-color: rgba(170, 59, 255, 0.5);
+  color: var(--accent);
+}
+
+.srd-speed-pill:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .srd-error {
   font-size: 11px;
   color: var(--red);

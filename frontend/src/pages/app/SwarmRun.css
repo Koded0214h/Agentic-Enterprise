@@ -88,6 +88,18 @@
   flex-shrink: 0;
 }
 
+.sr-model-tag {
+  font-size: 10px;
+  font-family: var(--mono);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: rgba(170, 59, 255, 0.12);
+  border: 1px solid rgba(170, 59, 255, 0.3);
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
 .sr-timer {
   display: flex;
   align-items: center;

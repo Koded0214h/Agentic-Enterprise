@@ -155,6 +155,31 @@ class ClaudeCodeEngine(BaseEngine):
     system_prompt_flag = "--system-prompt"
     auto_flag = "--print"
 
+    @classmethod
+    def build_command(cls, system_prompt: str, task: str, *, headless: bool = True) -> list:
+        prompt_file = _user_runtime_dir() / f"_prompt_{cls.name}.md"
+        prompt_file.parent.mkdir(exist_ok=True)
+        prompt_file.write_text(system_prompt)
+
+        cmd = ["claude"]
+        if cls.system_prompt_flag:
+            cmd.extend([cls.system_prompt_flag, str(prompt_file)])
+        if headless:
+            # --bare skips hooks/plugins/CLAUDE.md discovery; --no-session-persistence
+            # avoids disk I/O — together they shave ~1-2s off each agent cold-start.
+            cmd.extend(["--print", "--bare", "--no-session-persistence"])
+        model = os.environ.get("SWARM_CLAUDE_MODEL", "").strip()
+        if model:
+            cmd.extend(["-m", model])
+        cmd.append(task)
+        return cmd
+
+    @classmethod
+    def augment_with_model(cls, argv: list, model: str) -> list:
+        if not argv or not model:
+            return argv
+        return [argv[0], "-m", model] + argv[1:]
+
 
 class GeminiCLIEngine(BaseEngine):
     """Google Gemini CLI"""

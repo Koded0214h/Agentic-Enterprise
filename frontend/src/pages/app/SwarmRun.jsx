@@ -49,6 +49,7 @@ export default function SwarmRun() {
   const [done, setDone] = useState(false)
   const [exitCode, setExitCode] = useState(null)
   const [goal, setGoal] = useState('')
+  const [model, setModel] = useState('')
   const [elapsed, setElapsed] = useState(0)
   const [inputVal, setInputVal] = useState('')
   const [awaitingInput, setAwaitingInput] = useState(false)
@@ -81,7 +82,10 @@ export default function SwarmRun() {
 
   // Load goal from status endpoint
   useEffect(() => {
-    api.get(`/swarm/run/${runId}/`).then(d => setGoal(d.goal || '')).catch(() => {})
+    api.get(`/swarm/run/${runId}/`).then(d => {
+      setGoal(d.goal || '')
+      setModel(d.model || '')
+    }).catch(() => {})
   }, [runId])
 
   // SSE stream
@@ -232,6 +236,7 @@ export default function SwarmRun() {
           </span>
         </div>
         <div className="sr-topbar-right">
+          {model && <span className="sr-model-tag">{model}</span>}
           <div className="sr-timer"><RiTimeLine size={12} />{fmt(elapsed)}</div>
           <div className="sr-view-toggle">
             <button className={view === 'nodes' ? 'active' : ''} onClick={() => setView('nodes')} title="Nodes view"><RiNodeTree size={14} /></button>
