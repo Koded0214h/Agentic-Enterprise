@@ -14,6 +14,8 @@ import os
 import re
 import subprocess
 import sys
+import threading
+import time
 import uuid
 import secrets
 from decimal import Decimal
@@ -439,20 +441,67 @@ _ANSI_RE = re.compile(r'\x1b\[[0-9;]*[mGKHF]')
 # agent-swarm lives two levels above backend/
 _SWARM_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "agent-swarm"
 
+# In-memory process store: run_id -> { proc, lines, done, exit_code }
+# Works with Django dev server (single process). Replace with Redis for production.
+_RUNS: dict = {}
+
+
+def _build_swarm_env():
+    env = os.environ.copy()
+    env_file = _SWARM_ROOT / ".env"
+    if env_file.exists():
+        for raw in env_file.read_text().splitlines():
+            raw = raw.strip()
+            if raw and not raw.startswith("#") and "=" in raw:
+                k, v = raw.split("=", 1)
+                env[k.strip()] = v.strip()
+    return env
+
+
+def _stdout_reader(proc, run):
+    """Background thread: drain proc.stdout into run['lines'].
+
+    Handles two TUI patterns that produce noise:
+    - Carriage-return spinners: "\\r  ⠙  msg...\\r  ⠹  msg..." in one buffered chunk.
+      Split on \\r and keep only the last non-empty segment.
+    - Repeated identical lines: deduplicate consecutive identical spinner frames.
+    """
+    try:
+        last_clean = None
+        for raw_line in proc.stdout:
+            # Collapse \r-overwritten segments — keep last non-empty one
+            segments = raw_line.split("\r")
+            raw = ""
+            for seg in reversed(segments):
+                if seg.strip():
+                    raw = seg
+                    break
+            if not raw:
+                continue
+
+            clean = _ANSI_RE.sub("", raw).rstrip()
+            if not clean:
+                continue
+
+            # Drop consecutive duplicates (spinner frames repeating same text)
+            if clean == last_clean:
+                continue
+            last_clean = clean
+
+            run["lines"].append({"type": "line", "content": clean})
+        proc.wait()
+    except Exception as exc:
+        run["lines"].append({"type": "error", "content": str(exc)})
+    finally:
+        run["done"] = True
+        run["exit_code"] = proc.returncode
+
 
 class SwarmRunView(APIView):
     """
     POST /api/swarm/run/
-
-    Launch an orchestrator run and stream output line-by-line via SSE.
-
-    Body:
-        { "goal": "Build a B2B SaaS for X", "engine": "claude" }
-
-    Events:
-        data: {"type": "line",  "content": "..."}
-        data: {"type": "done",  "exit_code": 0}
-        data: {"type": "error", "detail": "..."}
+    Start an orchestrator run. Returns run_id immediately.
+    Body: { "goal": "...", "engine": "claude" }
     """
     permission_classes = [IsAuthenticated]
 
@@ -470,37 +519,105 @@ class SwarmRunView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # Build env — inherit current env, overlay swarm .env if present
-        env = os.environ.copy()
-        env_file = _SWARM_ROOT / ".env"
-        if env_file.exists():
-            for raw in env_file.read_text().splitlines():
-                raw = raw.strip()
-                if raw and not raw.startswith("#") and "=" in raw:
-                    k, v = raw.split("=", 1)
-                    env[k.strip()] = v.strip()
+        run_id = str(uuid.uuid4())
+        env = _build_swarm_env()
+
+        proc = subprocess.Popen(
+            [sys.executable, str(orchestrator), goal, "--engine", engine],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            cwd=str(_SWARM_ROOT),
+            env=env,
+        )
+
+        run = {"proc": proc, "lines": [], "done": False, "exit_code": None, "goal": goal, "engine": engine}
+        _RUNS[run_id] = run
+
+        t = threading.Thread(target=_stdout_reader, args=(proc, run), daemon=True)
+        t.start()
+
+        return Response({"run_id": run_id, "goal": goal, "engine": engine})
+
+
+class SwarmRunStreamView(APIView):
+    """
+    GET /api/swarm/run/<run_id>/stream/
+    SSE stream. Replays history then tails new lines. Sends a ping every 15s to keep alive.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, run_id):
+        run = _RUNS.get(run_id)
+        if not run:
+            return Response({"error": "Run not found"}, status=status.HTTP_404_NOT_FOUND)
 
         def _stream():
-            try:
-                proc = subprocess.Popen(
-                    [sys.executable, str(orchestrator), goal, "--engine", engine],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1,
-                    cwd=str(_SWARM_ROOT),
-                    env=env,
-                )
-                for raw_line in proc.stdout:
-                    clean = _ANSI_RE.sub("", raw_line).rstrip()
-                    if clean:
-                        yield f"data: {json.dumps({'type': 'line', 'content': clean})}\n\n"
-                proc.wait()
-                yield f"data: {json.dumps({'type': 'done', 'exit_code': proc.returncode})}\n\n"
-            except Exception as exc:
-                yield f"data: {json.dumps({'type': 'error', 'detail': str(exc)})}\n\n"
+            idx = 0
+            last_ping = time.time()
+            while True:
+                # Drain buffered lines
+                while idx < len(run["lines"]):
+                    yield f"data: {json.dumps(run['lines'][idx])}\n\n"
+                    idx += 1
+
+                if run["done"]:
+                    yield f"data: {json.dumps({'type': 'done', 'exit_code': run['exit_code']})}\n\n"
+                    break
+
+                # Keepalive ping every 15s
+                if time.time() - last_ping > 15:
+                    yield f"data: {json.dumps({'type': 'ping'})}\n\n"
+                    last_ping = time.time()
+
+                time.sleep(0.1)
 
         response = StreamingHttpResponse(_stream(), content_type="text/event-stream")
         response["Cache-Control"] = "no-cache"
         response["X-Accel-Buffering"] = "no"
         return response
+
+
+class SwarmRunInputView(APIView):
+    """
+    POST /api/swarm/run/<run_id>/input/
+    Send a line of stdin to the running orchestrator process.
+    Body: { "text": "yes" }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, run_id):
+        run = _RUNS.get(run_id)
+        if not run:
+            return Response({"error": "Run not found"}, status=status.HTTP_404_NOT_FOUND)
+        if run["done"]:
+            return Response({"error": "Run has already finished"}, status=status.HTTP_410_GONE)
+
+        text = (request.data.get("text") or "")
+        try:
+            run["proc"].stdin.write(text + "\n")
+            run["proc"].stdin.flush()
+        except OSError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({"ok": True})
+
+
+class SwarmRunStatusView(APIView):
+    """GET /api/swarm/run/<run_id>/  — lightweight status poll."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, run_id):
+        run = _RUNS.get(run_id)
+        if not run:
+            return Response({"error": "Run not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response({
+            "run_id": run_id,
+            "goal": run["goal"],
+            "engine": run["engine"],
+            "done": run["done"],
+            "exit_code": run["exit_code"],
+            "line_count": len(run["lines"]),
+        })

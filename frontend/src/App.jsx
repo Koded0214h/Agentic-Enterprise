@@ -11,6 +11,7 @@ import BlueprintGallery from './pages/app/BlueprintGallery'
 import BlueprintDetail from './pages/app/BlueprintDetail'
 import DeployWizard from './pages/app/DeployWizard'
 import WorkflowRun from './pages/app/WorkflowRun'
+import SwarmRun from './pages/app/SwarmRun'
 import ApprovalsInbox from './pages/app/ApprovalsInbox'
 import ApprovalDetail from './pages/app/ApprovalDetail'
 import AgentsPage from './pages/app/AgentsPage'
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="blueprints/:id" element={<BlueprintDetail />} />
             <Route path="blueprints/:id/deploy" element={<DeployWizard />} />
             <Route path="workflows/:id/run" element={<WorkflowRun />} />
+            <Route path="swarm/:runId" element={<SwarmRun />} />
             <Route path="approvals" element={<ApprovalsInbox />} />
             <Route path="approvals/:id" element={<ApprovalDetail />} />
             <Route path="agents" element={<AgentsPage />} />

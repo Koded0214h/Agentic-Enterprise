@@ -7,6 +7,9 @@ from .views import (
     SwarmKBQueryView,
     SwarmExecutionContextDetailView,
     SwarmRunView,
+    SwarmRunStreamView,
+    SwarmRunInputView,
+    SwarmRunStatusView,
 )
 
 urlpatterns = [
@@ -32,6 +35,9 @@ urlpatterns = [
         name="swarm-execution-detail",
     ),
 
-    # Launch a swarm run and stream output via SSE
-    path("run/", SwarmRunView.as_view(), name="swarm-run"),
+    # Swarm run lifecycle
+    path("run/",                          SwarmRunView.as_view(),       name="swarm-run"),
+    path("run/<str:run_id>/",             SwarmRunStatusView.as_view(), name="swarm-run-status"),
+    path("run/<str:run_id>/stream/",      SwarmRunStreamView.as_view(), name="swarm-run-stream"),
+    path("run/<str:run_id>/input/",       SwarmRunInputView.as_view(),  name="swarm-run-input"),
 ]
