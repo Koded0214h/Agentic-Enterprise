@@ -1244,9 +1244,70 @@
       "file": "creative/ui-ux-scout.md",
       "engine": null,
       "source": "creative"
+    },
+    "cron-scheduler-agent": {
+      "file": "integrations/cron-scheduler-agent.md",
+      "engine": null,
+      "source": "integrations"
+    },
+    "autonomous-ads-agent": {
+      "file": "integrations/autonomous-ads-agent.md",
+      "engine": null,
+      "source": "integrations"
+    },
+    "whatsapp-bot-agent": {
+      "file": "integrations/whatsapp-bot-agent.md",
+      "engine": null,
+      "source": "integrations"
+    },
+    "telegram-bot-agent": {
+      "file": "integrations/telegram-bot-agent.md",
+      "engine": null,
+      "source": "integrations"
+    },
+    "github-automation-agent": {
+      "file": "integrations/github-automation-agent.md",
+      "engine": null,
+      "source": "integrations"
+    },
+    "conversation-hub-agent": {
+      "file": "integrations/conversation-hub-agent.md",
+      "engine": null,
+      "source": "integrations"
     }
   },
-  "mcpServers": {},
+  "mcpServers": {
+    "messaging": {
+      "command": "python",
+      "args": ["mcp_servers/messaging_server.py"],
+      "description": "WhatsApp, Telegram, Slack, and Email messaging tools"
+    },
+    "social": {
+      "command": "python",
+      "args": ["mcp_servers/social_server.py"],
+      "description": "Twitter/X, LinkedIn, and Instagram social media tools"
+    },
+    "github": {
+      "command": "python",
+      "args": ["mcp_servers/github_server.py"],
+      "description": "GitHub issues, PRs, releases, and Actions automation"
+    },
+    "scheduler": {
+      "command": "python",
+      "args": ["mcp_servers/scheduler_server.py"],
+      "description": "Cron job scheduler — create and manage recurring autonomous tasks"
+    },
+    "ads": {
+      "command": "python",
+      "args": ["mcp_servers/ads_server.py"],
+      "description": "Google Ads and Meta Ads campaign management and reporting"
+    },
+    "hub": {
+      "command": "python",
+      "args": ["mcp_servers/hub_server.py"],
+      "description": "Conversation hub — unified routing across WhatsApp, Telegram, and Slack"
+    }
+  },
   "file_context": {
     "enabled": true,
     "show_instruction": null,
