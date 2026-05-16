@@ -391,6 +391,12 @@ class NativeAgentWorker:
 
             yield response, tool_results
 
+            if response.stop_reason == "error":
+                # Provider returned a structured error (key missing, blocked
+                # response, all fallbacks exhausted). Bail with the content
+                # as the error so the orchestrator surfaces it cleanly.
+                raise RuntimeError(response.content or "LLM provider returned an error")
+
             if response.stop_reason == "end_turn":
                 break
 

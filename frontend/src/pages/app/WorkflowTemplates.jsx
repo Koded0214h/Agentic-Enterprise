@@ -235,17 +235,24 @@ export default function WorkflowTemplates() {
                 <ul className="tpl-modal-nodes">
                   {result.graph?.nodes?.map((n) => (
                     <li key={n.id} className={`tpl-modal-node status-${n.status}`}>
-                      <span className="tpl-modal-node-id">{n.id}</span>
-                      <span className="tpl-modal-node-agent">{n.agent_name}</span>
-                      <span className={`badge badge-${
-                        n.status === 'completed' ? 'green' :
-                        n.status === 'failed' ? 'red' :
-                        n.status === 'cancelled' || n.status === 'skipped' ? 'amber' :
-                        'gray'
-                      }`}>
-                        {n.status}
-                      </span>
-                      <span className="tpl-modal-mono">{n.duration_ms ? `${(n.duration_ms / 1000).toFixed(1)}s` : ''}</span>
+                      <div className="tpl-modal-node-row">
+                        <span className="tpl-modal-node-id">{n.id}</span>
+                        <span className="tpl-modal-node-agent">{n.agent_name}</span>
+                        <span className={`badge badge-${
+                          n.status === 'completed' ? 'green' :
+                          n.status === 'failed' ? 'red' :
+                          n.status === 'cancelled' || n.status === 'skipped' ? 'amber' :
+                          'gray'
+                        }`}>
+                          {n.status}
+                        </span>
+                        <span className="tpl-modal-mono">{n.duration_ms ? `${(n.duration_ms / 1000).toFixed(1)}s` : ''}</span>
+                      </div>
+                      {n.error && (
+                        <div className="tpl-modal-node-error" title={n.error}>
+                          {n.error.length > 200 ? n.error.slice(0, 200) + '…' : n.error}
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
