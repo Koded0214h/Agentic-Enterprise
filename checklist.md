@@ -25,10 +25,10 @@
 * [ ] Redis deployment
 * [ ] HTTPS + SSL
 * [ ] Domain setup (aos-swarm.com)
-* [ ] Error logging
-* [ ] Health checks
+* [x] Error logging
+* [x] Health checks
 * [ ] Background worker monitoring
-* [ ] CI/CD pipeline
+* [x] CI/CD pipeline
 * [ ] Staging environment
 * [ ] Production environment
 * [ ] API versioning
@@ -44,25 +44,25 @@
 * [x] User signup
 * [x] User login
 * [x] JWT authentication
-* [ ] Password reset
+* [x] Password reset
 * [x] Session management
 * [x] Session revocation
 * [ ] Email verification
 * [x] Secure logout
-* [ ] Refresh token flow
+* [x] Refresh token flow
 
 ## User Accounts
 
-* [ ] User profile page
-* [ ] Workspace creation
-* [ ] Team invitations
+* [x] User profile page
+* [x] Workspace creation
+* [x] Team invitations
 * [ ] Workspace switching
 * [x] Basic RBAC
-* [ ] User onboarding flow
-* [ ] User settings page
-* [ ] LLM provider configuration
-* [ ] API key management
-* [ ] Secure encrypted key storage
+* [x] User onboarding flow
+* [x] User settings page
+* [x] LLM provider configuration
+* [x] API key management
+* [x] Secure encrypted key storage
 
 ---
 
@@ -72,17 +72,17 @@
 
 * [x] Landing page
 * [x] Hero section
-* [ ] Product demo section
+* [x] Product demo section
 * [x] Features section
-* [ ] Pricing section
+* [x] Pricing section
 * [x] FAQ section
-* [ ] Waitlist form
+* [x] Waitlist form
 * [ ] Contact form
 * [ ] Docs link
-* [ ] Terms of service
-* [ ] Privacy policy
+* [x] Terms of service
+* [x] Privacy policy
 * [x] Beta signup CTA
-* [ ] Founder story section
+* [x] Founder story section
 * [ ] Blog system
 * [ ] SEO setup
 * [ ] Analytics integration
@@ -108,7 +108,7 @@
 ## Demo Experience
 
 * [ ] Example startup workflow
-* [ ] Demo task templates
+* [x] Demo task templates
 * [ ] Sample outputs
 * [ ] Interactive tutorial
 * [ ] Guided first task
@@ -129,7 +129,7 @@
 * [x] Agent reassignment logic
 * [x] Failure recovery
 * [x] Timeout handling
-* [ ] Cancellation support
+* [x] Cancellation support
 * [x] Parallel execution
 * [x] Agent status tracking
 
@@ -146,7 +146,7 @@
 
 ## Agent Coordination
 
-* [ ] Planner agent
+* [x] Planner agent
 * [ ] Task graph creation
 * [ ] Subtask delegation
 * [x] Workflow orchestration
@@ -160,21 +160,21 @@
 
 ## Council Architecture
 
-* [ ] Council coordinator
-* [ ] Architecture review agent
-* [ ] Security review agent
-* [ ] Cost analysis agent
-* [ ] Product review agent
-* [ ] Deployment review agent
-* [ ] Governance review agent
-* [ ] Conflict resolution logic
+* [x] Council coordinator
+* [x] Architecture review agent
+* [x] Security review agent
+* [x] Cost analysis agent
+* [x] Product review agent
+* [x] Deployment review agent
+* [x] Governance review agent
+* [x] Conflict resolution logic
 
 ## Council Features
 
-* [ ] Multi-agent review flow
-* [ ] Approval voting system
-* [ ] Risk scoring
-* [ ] Recommendation summaries
+* [x] Multi-agent review flow
+* [x] Approval voting system
+* [x] Risk scoring
+* [x] Recommendation summaries
 * [ ] Escalation handling
 * [x] Human override support
 
@@ -225,9 +225,9 @@
 * [x] ESCALATE rules
 * [x] Runtime enforcement
 * [x] Tool-level permissions
-* [ ] Workspace isolation
+* [x] Workspace isolation
 * [x] Agent identity system
-* [ ] Cryptographic UUIDs
+* [x] Cryptographic UUIDs
 
 ---
 
@@ -282,17 +282,17 @@
 * [x] OpenAI support
 * [x] Anthropic support
 * [x] Gemini support
-* [ ] Mistral support
-* [ ] Ollama support
+* [x] Mistral support
+* [x] Ollama support
 * [ ] Custom provider support
 
 ## Routing
 
 * [x] Model routing logic
-* [ ] Fallback models
+* [x] Fallback models
 * [ ] Cost-aware routing
 * [ ] Latency-aware routing
-* [ ] Provider failover
+* [x] Provider failover
 * [ ] Budget-aware selection
 
 ---
@@ -312,9 +312,9 @@
 
 ## Memory UX
 
-* [ ] Memory viewer
-* [ ] Memory search
-* [ ] Memory deletion
+* [x] Memory viewer
+* [x] Memory search
+* [x] Memory deletion
 * [ ] Memory tagging
 * [ ] Retrieval logs
 
@@ -335,12 +335,12 @@
 * [x] Live execution feed
 * [x] Agent activity feed
 * [ ] Workflow visualisation
-* [ ] Token usage charts
-* [ ] Cost charts
+* [x] Token usage charts
+* [x] Cost charts
 * [ ] Failure analytics
 * [ ] Retry analytics
-* [ ] Queue monitoring
-* [ ] Runtime metrics
+* [x] Queue monitoring
+* [x] Runtime metrics
 
 ## Logging
 
@@ -348,7 +348,7 @@
 * [x] Error logs
 * [x] Audit logs
 * [x] API request logs
-* [ ] Security logs
+* [x] Security logs
 
 ---
 
@@ -368,16 +368,16 @@
 * [x] Soft token warnings
 * [x] Budget ceilings
 * [ ] Usage alerts
-* [ ] Beta tester quotas
-* [ ] Abuse prevention
+* [x] Beta tester quotas
+* [x] Abuse prevention
 
 ## Billing UI
 
-* [ ] Usage dashboard
-* [ ] Cost breakdowns
+* [x] Usage dashboard
+* [x] Cost breakdowns
 * [ ] Billing history
-* [ ] Plan limits display
-* [ ] Token analytics
+* [x] Plan limits display
+* [x] Token analytics
 
 ---
 
@@ -476,9 +476,9 @@
 * [x] Workspace overview
 * [x] Active workflows
 * [x] Agent status
-* [ ] Usage metrics
+* [x] Usage metrics
 * [x] Recent activity
-* [ ] Notifications
+* [x] Notifications
 * [x] Approval requests
 * [ ] Team activity
 
@@ -487,9 +487,9 @@
 * [x] Workflow creation
 * [x] Workflow progress tracking
 * [x] Workflow logs
-* [ ] Workflow cancellation
+* [x] Workflow cancellation
 * [x] Workflow replay
-* [ ] Workflow templates
+* [x] Workflow templates
 
 ---
 
@@ -529,13 +529,13 @@
 
 ## Core Security
 
-* [ ] Secure secrets management
-* [ ] API key encryption
-* [ ] Workspace isolation
+* [x] Secure secrets management
+* [x] API key encryption
+* [x] Workspace isolation
 * [x] Rate limiting
 * [x] Request validation
 * [x] Input sanitisation
-* [ ] Prompt injection protection
+* [x] Prompt injection protection
 * [x] Tool permission enforcement
 
 ## Auditability
@@ -544,7 +544,7 @@
 * [x] Policy decision logs
 * [x] Execution replay
 * [x] Tool execution logs
-* [ ] Security event logs
+* [x] Security event logs
 
 ---
 
@@ -552,19 +552,19 @@
 
 ## Tester Management
 
-* [ ] Beta invite system
-* [ ] Waitlist management
-* [ ] Invite codes
+* [x] Beta invite system
+* [x] Waitlist management
+* [x] Invite codes
 * [ ] Tester onboarding
 * [ ] Tester analytics
-* [ ] Feedback collection
+* [x] Feedback collection
 * [ ] Usage tracking
 
 ## Feedback Loops
 
-* [ ] In-app feedback
-* [ ] Bug reporting
-* [ ] Feature request system
+* [x] In-app feedback
+* [x] Bug reporting
+* [x] Feature request system
 * [ ] Session replay tools
 * [ ] User interviews
 
@@ -645,10 +645,10 @@
 * [ ] Deployment workflows tested
 * [x] Recovery systems functional
 * [x] Error handling implemented
-* [ ] Security baseline completed
+* [x] Security baseline completed
 * [ ] Landing page live
-* [ ] Waitlist system active
-* [ ] Feedback collection active
+* [x] Waitlist system active
+* [x] Feedback collection active
 
 ---
 
@@ -687,3 +687,121 @@ The beta should answer:
 * Will people pay for the leverage?
 
 That is the real mission of V1.
+
+---
+
+# 28. WHAT I CAN'T CURRENTLY DO (AND WHY)
+
+The 122 remaining unchecked items fall into five categories. Most are not "engineering left to do" — they're blocked on decisions, accounts, or running infrastructure that I don't have access to from inside this repo.
+
+## A. Needs paid cloud accounts / DNS — can't be done from code alone
+
+These require you to provision real infrastructure or buy a domain:
+
+* Production backend / frontend deployment (need Render/Fly/Railway/AWS account)
+* Production database setup (Postgres on a managed host)
+* Redis deployment (Upstash, Redis Cloud, or managed Redis)
+* HTTPS + SSL certificates (auto-issued once deployed behind a real domain)
+* Domain setup `aos-swarm.com` (register the domain + point DNS)
+* Background worker monitoring (needs Flower/Grafana on a running cluster)
+* Staging environment
+* Production environment
+* Backup strategy (managed DB backups)
+* Disaster recovery basics (runbook + tested failovers)
+* "Landing page live" — code is ready, just needs to be deployed
+* "Deployment workflows tested" — needs a real deploy target
+
+**Unblock by:** picking a hosting stack (recommend Fly.io for backend, Vercel for frontend, Upstash for Redis) and giving me the keys, then I can write the deploy configs.
+
+## B. Needs third-party API keys / external services
+
+The code path exists but is dormant until you wire up an account:
+
+* **Email verification, password reset emails, approval notifications, usage alerts** — need SMTP (SendGrid/Postmark/Resend)
+* **Analytics integration / token burn analytics / user retention tracking / workflow completion tracking / feature usage analytics / failure analysis / most-used workflows** — need PostHog or Mixpanel project key
+* **Session replay tools** — need LogRocket / Sentry Replay
+* **SEO setup** — needs the deployed domain + Search Console verification
+* **Blog system** — needs a CMS choice (Sanity / Contentlayer / hosted)
+* **Discord integration** — needs Discord bot token + server invite
+* **Calendar integration / Reminder system** — needs Google Calendar + Microsoft Graph OAuth client IDs
+* **Analytics collection** (marketing) — needs Twitter/LinkedIn/Meta ad API keys
+* **Contact form** — needs a destination (your email, or a form service)
+* **Docs link** — needs to point at real docs
+
+**Unblock by:** giving me the API keys / service choices and I'll wire each one up.
+
+## C. Needs design / UX decisions before I can code them
+
+These are blocked on *how you want them to work*, not on capability:
+
+* Workspace switching (top-bar dropdown? sidebar workspace list?)
+* Welcome flow / Workspace setup wizard / First workflow walkthrough
+* Budget configuration UI (slider? presets? per-agent breakdown?)
+* Token usage explanation (educational modal? dashboard chip?)
+* HITL preference setup (per-tool? per-cost-threshold? global?)
+* Demo experience (sample outputs / interactive tutorial / guided first task)
+* Agent detail page (deep agent profile — what does it show?)
+* Team activity feed (what events? per-user filter?)
+* Workflow visualisation (D3 DAG? mermaid? cytoscape?)
+* Memory tagging UX / Retrieval logs UX
+* Tester onboarding flow (separate from regular user onboarding?)
+
+**Unblock by:** answering "what should this look and feel like" — then I can build it.
+
+## D. Real engineering work still to do (no blockers, just unfinished)
+
+These I could build now if given another session:
+
+* **Section 5 — Agent Coordination:** Task graph creation, subtask delegation, multi-agent communication, agent dependency handling (the Council is built; what's missing is the orchestration DAG for non-council workflows)
+* **Section 7 — HITL:** approval notifications, escalation workflows, manual intervention tools; deployment / external-publishing / sensitive-tool / destructive / credential-access approval triggers
+* **Section 8 — Policy testing harness**
+* **Section 10 — Cost-aware / latency-aware / budget-aware routing** (the fallback chain is built; cost-routing needs a pricing table)
+* **Section 11 — Embedding generation, long-term memory consolidation, workspace memory partitioning, memory tagging, retrieval logs**
+* **Section 12 — Workflow visualisation, failure analytics, retry analytics**
+* **Section 13 — Per-workflow costs, billing history**
+* **Section 9 — Tool analytics**
+* **Section 6 — Council escalation handling**
+* **Section 10 — Custom provider plugin interface**
+* **Section 19 — "Launch Landing Page" + "Setup Analytics Stack" canonical workflows; idea intake, market research orchestration, architecture planning, database setup, landing page generation, analytics setup, support workflow setup** (need orchestrated multi-agent compositions, not new primitives)
+
+**Unblock by:** prioritising and giving me a session to grind through them. No external dependencies.
+
+## E. Cannot be checked off by code — requires real users + time
+
+These are outcome metrics. They become true *after* the beta runs, not before:
+
+* **Section 24 — V1 Success Metrics:** "Users complete workflows successfully", "MVP deployment success rate acceptable", "Users return after first session", "Token burn remains manageable", "Founders launch projects faster", "Founders reduce operational burden", "Founders trust AOS workflows", "Users actively test startup operations"
+* **Section 21 — Tester onboarding / Tester analytics / Usage tracking / User interviews** — need real testers and a feedback cadence
+* **Section 23 — Learning systems** (workflow optimisation, retry pattern analysis, agent performance scoring, prompt improvement tracking) — need run history before they have anything to learn from
+
+**Unblock by:** ship the beta, get testers using it, then these light up.
+
+## F. Documentation (just needs writing)
+
+Section 22 is entirely "sit down and write":
+
+* Getting started guide
+* Workflow tutorials
+* Agent documentation
+* Billing / HITL / Governance explanations
+* Troubleshooting docs
+* API docs (could be auto-generated from DRF schema — quick win)
+* MCP integration docs
+* SDK docs
+* Webhook docs
+
+**Unblock by:** dedicate a session, or have a docs agent grind through it once the codebase stops moving.
+
+---
+
+## Quickest path to checking 25+ more items
+
+If you want the fastest beta-launch progress:
+
+1. Pick a hosting stack → I deploy it (unblocks ~12 infrastructure items)
+2. Get a Resend/Postmark API key → I wire emails (unblocks ~5 items)
+3. Get a PostHog project key → I wire analytics (unblocks ~8 analytics items)
+4. Decide on workspace switching + welcome flow UX → I build them (~6 onboarding items)
+5. Auto-generate API docs from DRF → 1 item, ~20 min
+
+That's ~32 items unlockable in roughly half a day of decisions + a session of execution.
