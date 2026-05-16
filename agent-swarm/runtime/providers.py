@@ -134,9 +134,14 @@ class AnthropicProvider(LLMProvider):
         except ImportError as exc:
             raise RuntimeError("anthropic package not installed — pip install anthropic") from exc
 
-        self._client = anthropic.AsyncAnthropic(
-            api_key=api_key or os.environ.get("ANTHROPIC_API_KEY", ""),
-        )
+        resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        if not resolved_key:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY is not set. Either provide one, or rely on "
+                "get_provider()'s automatic fallback to another configured "
+                "provider (Gemini / OpenAI / Mistral)."
+            )
+        self._client = anthropic.AsyncAnthropic(api_key=resolved_key)
 
     def _format_messages(self, messages: list[Message]) -> list[dict]:
         formatted = []
@@ -583,6 +588,55 @@ _FALLBACK_CHAIN: dict[str, list[tuple[str, str]]] = {
 }
 
 
+# Maps a provider name to the env var that gates it. If the env var is empty,
+# routing skips that provider and picks the next available one (so a user with
+# only a Gemini key can run any agent — including ones routed to Anthropic).
+_PROVIDER_KEY_ENV: dict[str, str] = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai":    "OPENAI_API_KEY",
+    "gemini":    "GEMINI_API_KEY",
+    "mistral":   "MISTRAL_API_KEY",
+    "ollama":    "",  # Ollama is local; no key gate
+}
+
+
+def _provider_available(provider_name: str) -> bool:
+    env_var = _PROVIDER_KEY_ENV.get(provider_name, "")
+    if not env_var:
+        return True  # No gate (Ollama)
+    return bool(os.environ.get(env_var, "").strip())
+
+
+# Default model for each provider — used when falling back so we always pick a
+# sensible model for that provider, not a model name from a different one.
+_PROVIDER_DEFAULT_MODEL: dict[str, str] = {
+    "anthropic": "claude-sonnet-4-6",
+    "openai":    "gpt-4o",
+    "gemini":    "gemini-2.0-flash",
+    "mistral":   "mistral-large-latest",
+    "ollama":    "llama3.2",
+}
+
+
+def _resolve_provider(provider_name: str, model: str) -> tuple[str, str]:
+    """
+    Returns (provider_name, model) to actually use. If the primary provider's
+    API key is missing, walks _FALLBACK_CHAIN and returns the first entry
+    whose key IS configured. If nothing is configured anywhere, returns the
+    original (caller will see a runtime error which is the right behaviour).
+    """
+    if _provider_available(provider_name):
+        return provider_name, model
+    for fallback_name, fallback_model in _FALLBACK_CHAIN.get(provider_name, []):
+        if _provider_available(fallback_name):
+            return fallback_name, fallback_model
+    # No fallback worked — try any provider that has a key set
+    for any_name in ("gemini", "anthropic", "openai", "mistral", "ollama"):
+        if _provider_available(any_name):
+            return any_name, _PROVIDER_DEFAULT_MODEL[any_name]
+    return provider_name, model  # Will raise a clear runtime error
+
+
 def _make_provider(provider_name: str, model: str) -> LLMProvider:
     if provider_name == "anthropic":
         return AnthropicProvider(model=model)
@@ -598,9 +652,15 @@ def _make_provider(provider_name: str, model: str) -> LLMProvider:
 
 
 def get_provider(agent_category: str = "") -> LLMProvider:
-    """Return the appropriate LLMProvider for a given agent category."""
-    provider_name, model = _PROVIDER_ROUTING.get(agent_category, _DEFAULT_ROUTING)
-    return _make_provider(provider_name, model)
+    """
+    Return the appropriate LLMProvider for a given agent category, AUTOMATICALLY
+    falling back to whatever provider key the operator has configured. So a
+    user with only GEMINI_API_KEY can run agents routed to Anthropic — they'll
+    transparently use Gemini instead.
+    """
+    primary, model = _PROVIDER_ROUTING.get(agent_category, _DEFAULT_ROUTING)
+    resolved_name, resolved_model = _resolve_provider(primary, model)
+    return _make_provider(resolved_name, resolved_model)
 
 
 async def get_provider_with_fallback(agent_category: str = "") -> LLMProvider:
