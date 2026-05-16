@@ -40,7 +40,7 @@ class DocumentProcessor:
             document.status = 'PROCESSING'
             document.save()
             
-            file_path = document.file.path
+            file_path = document.file.path if document.file and document.file.name else (document.filename or document.file.name)
             file_ext = os.path.splitext(document.filename)[1].lower()
             
             # Extract text based on file type
@@ -178,6 +178,7 @@ class DocumentProcessor:
             chunk = text[start:end].strip()
             if chunk:
                 chunks.append(chunk)
-            start = end - overlap
+            next_start = end - overlap
+            start = next_start if next_start > start else end
         
         return chunks
