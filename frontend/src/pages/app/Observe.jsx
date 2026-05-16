@@ -3,7 +3,7 @@ import {
   RiEyeLine, RiRadioButtonLine, RiFileSearchLine, RiAlertLine, RiShieldLine,
   RiCheckLine, RiCloseLine, RiTimeLine, RiRefreshLine, RiArrowRightSLine,
   RiPulseLine, RiErrorWarningLine, RiInformationLine, RiBarChart2Line,
-  RiLineChartLine, RiListCheck2, RiSpeedLine, RiFlowChartLine, RiShareLine,
+  RiLineChartLine, RiListCheck2, RiSpeedLine, RiFlowChart, RiShareLine,
 } from 'react-icons/ri'
 import { observe } from '../../api/observe'
 import { agents as agentsAPI } from '../../api/agents'
@@ -19,7 +19,7 @@ const TABS = [
   { id: 'metrics',  label: 'Metrics',           Icon: RiBarChart2Line },
   { id: 'failures', label: 'Failure Analytics', Icon: RiErrorWarningLine },
   { id: 'retries',  label: 'Task Performance',  Icon: RiRefreshLine },
-  { id: 'graph',    label: 'Workflow Graph',     Icon: RiFlowChartLine },
+  { id: 'graph',    label: 'Workflow Graph',     Icon: RiFlowChart },
 ]
 
 const RISK_ICON = { green: <RiCheckLine size={13} color="var(--green)" />, amber: <RiErrorWarningLine size={13} color="var(--amber)" />, red: <RiCloseLine size={13} color="var(--red)" /> }
@@ -983,14 +983,14 @@ function WorkflowGraph() {
   }
 
   if (!data) {
-    return <EmptyState icon={<RiFlowChartLine size={32} />} text="Could not load workflow graph." />
+    return <EmptyState icon={<RiFlowChart size={32} />} text="Could not load workflow graph." />
   }
 
   const nodes = data.nodes || []
   const edges = data.edges || []
 
   if (nodes.length === 0) {
-    return <EmptyState icon={<RiFlowChartLine size={32} />} text="No workflow tasks yet. Run a DAG workflow to see the graph." />
+    return <EmptyState icon={<RiFlowChart size={32} />} text="No workflow tasks yet. Run a DAG workflow to see the graph." />
   }
 
   // Build adjacency: node id -> list of dep node ids (from)
@@ -1008,7 +1008,7 @@ function WorkflowGraph() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="card">
         <div className="obs-metrics-head">
-          <RiFlowChartLine size={15} />
+          <RiFlowChart size={15} />
           <span>Workflow Task Graph</span>
           <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text)', fontWeight: 400 }}>
             {nodes.length} nodes · {edges.length} edges
