@@ -280,14 +280,17 @@ class GeminiProvider(LLMProvider):
     """
 
     # Fallback list when the requested model name is unrecognised / quota'd.
+    # Ordered newest → cheapest stable. The v1beta API only exposes the 2.5
+    # family on most accounts; 2.0 and 1.5 names return 404 NotFound.
     _MODEL_FALLBACKS = [
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-pro",
+        "gemini-2.0-flash",       # last-resort fallbacks for older accounts
         "gemini-1.5-flash-latest",
-        "gemini-1.5-pro",
     ]
 
-    def __init__(self, model: str = "gemini-2.0-flash", api_key: str = ""):
+    def __init__(self, model: str = "gemini-2.5-flash", api_key: str = ""):
         super().__init__(model)
         try:
             import google.generativeai as genai
@@ -678,8 +681,8 @@ _PROVIDER_ROUTING: dict[str, tuple[str, str]] = {
     "research":     ("anthropic", "claude-opus-4-7"),
     "academic":     ("anthropic", "claude-opus-4-7"),
     "strategy":     ("anthropic", "claude-opus-4-7"),
-    "marketing":    ("gemini",    "gemini-2.0-flash"),
-    "creative":     ("gemini",    "gemini-2.0-flash"),
+    "marketing":    ("gemini",    "gemini-2.5-flash"),
+    "creative":     ("gemini",    "gemini-2.5-flash"),
     "support":      ("openai",    "gpt-4o-mini"),
     "sales":        ("anthropic", "claude-sonnet-4-6"),
     "analytics":    ("mistral",   "mistral-large-latest"),
@@ -722,7 +725,7 @@ def _provider_available(provider_name: str) -> bool:
 _PROVIDER_DEFAULT_MODEL: dict[str, str] = {
     "anthropic": "claude-sonnet-4-6",
     "openai":    "gpt-4o",
-    "gemini":    "gemini-2.0-flash",
+    "gemini":    "gemini-2.5-flash",
     "mistral":   "mistral-large-latest",
     "ollama":    "llama3.2",
 }
