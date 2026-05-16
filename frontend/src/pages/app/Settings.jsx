@@ -158,6 +158,8 @@ function ProvidersTab() {
   const [form, setForm] = useState({ api_key: '', model: '' })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState({})
+  const [pricing, setPricing] = useState([])
+  const [pricingLoading, setPricingLoading] = useState(true)
 
   useEffect(() => {
     api.get('/auth/llm-configs/')
@@ -168,6 +170,11 @@ function ProvidersTab() {
         setConfigs(map)
       })
       .catch(() => {})
+
+    api.get('/intelligence/providers/pricing/')
+      .then(data => setPricing(data?.pricing || []))
+      .catch(() => {})
+      .finally(() => setPricingLoading(false))
   }, [])
 
   function openForm(p) {
@@ -265,6 +272,46 @@ function ProvidersTab() {
             </div>
           )
         })}
+      </div>
+
+      {/* Provider Pricing Table */}
+      <div>
+        <div className="set-section-head" style={{ marginBottom: 10 }}>
+          <h2>Provider pricing</h2>
+          <p>Estimated costs per 1,000 tokens across supported providers. Used for cost-aware routing.</p>
+        </div>
+        {pricingLoading ? (
+          <div style={{ fontSize: 12, color: 'var(--text)', padding: '12px 0' }}>Loading pricing…</div>
+        ) : pricing.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--text)', padding: '12px 0' }}>No pricing data available.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr>
+                  {['Provider', 'Model', 'Input / 1k', 'Output / 1k', 'Est. per call'].map(h => (
+                    <th key={h} style={{ textAlign: 'left', padding: '7px 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text)', borderBottom: '1px solid var(--border)', background: 'var(--bg-2)', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pricing.map((row, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '7px 10px', color: 'var(--text-h)', fontWeight: 600 }}>{row.provider}</td>
+                    <td style={{ padding: '7px 10px', color: 'var(--text-2)', fontFamily: 'var(--mono)' }}>{row.model}</td>
+                    <td style={{ padding: '7px 10px', color: 'var(--text-2)', fontFamily: 'var(--mono)' }}>${row.cost_per_1k_input.toFixed(5)}</td>
+                    <td style={{ padding: '7px 10px', color: 'var(--text-2)', fontFamily: 'var(--mono)' }}>${row.cost_per_1k_output.toFixed(5)}</td>
+                    <td style={{ padding: '7px 10px', fontFamily: 'var(--mono)' }}>
+                      <span style={{ color: row.estimated_per_call === 0 ? 'var(--green)' : 'var(--text-h)', fontWeight: 600 }}>
+                        {row.estimated_per_call === 0 ? 'Free' : `$${row.estimated_per_call.toFixed(5)}`}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -5,6 +5,22 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+PROVIDER_COST_TABLE = {
+    # (provider, model_pattern): (cost_per_1k_input_tokens, cost_per_1k_output_tokens)
+    ("OPENAI", "gpt-4o"): (0.005, 0.015),
+    ("OPENAI", "gpt-4o-mini"): (0.00015, 0.0006),
+    ("OPENAI", "gpt-4-turbo"): (0.01, 0.03),
+    ("OPENAI", "gpt-3.5-turbo"): (0.0005, 0.0015),
+    ("CLAUDE", "claude-opus"): (0.015, 0.075),
+    ("CLAUDE", "claude-sonnet"): (0.003, 0.015),
+    ("CLAUDE", "claude-haiku"): (0.00025, 0.00125),
+    ("GEMINI", "gemini-2.5-flash"): (0.00015, 0.0006),
+    ("GEMINI", "gemini-1.5-pro"): (0.00125, 0.005),
+    ("MISTRAL", "mistral-large"): (0.004, 0.012),
+    ("MISTRAL", "mistral-small"): (0.001, 0.003),
+    ("LLAMA", ""): (0.0, 0.0),  # local = free
+}
+
 
 class LLMManager:
     """Factory for creating LangChain LLM instances from our config."""
@@ -135,3 +151,38 @@ class LLMManager:
         # on the same object returned by get_llm(), so no separate async
         # instantiation is needed.
         return cls.get_llm(config)
+
+    @classmethod
+    def estimate_cost(cls, config, input_tokens: int = 1000, output_tokens: int = 500) -> float:
+        """Estimate cost in USD for a call with the given config."""
+        for (provider, model_pattern), (in_cost, out_cost) in PROVIDER_COST_TABLE.items():
+            if config.provider == provider and model_pattern in (config.model_name or ''):
+                return (input_tokens / 1000 * in_cost) + (output_tokens / 1000 * out_cost)
+        return 0.002  # default fallback
+
+    @classmethod
+    def select_cheapest_available(cls, configs, budget_usd: float = 0.01) -> 'LLMConfig':
+        """
+        From a list of LLMConfig objects, return the one with the lowest
+        estimated cost that is within budget. Falls back to the first config.
+        """
+        if not configs:
+            raise ValueError("No configs provided")
+        affordable = [c for c in configs if cls.estimate_cost(c) <= budget_usd]
+        if not affordable:
+            affordable = configs
+        return min(affordable, key=lambda c: cls.estimate_cost(c))
+
+    @classmethod
+    def get_provider_pricing(cls) -> list:
+        """Return pricing table as a list of dicts for the frontend."""
+        result = []
+        for (provider, model), (in_cost, out_cost) in PROVIDER_COST_TABLE.items():
+            result.append({
+                'provider': provider,
+                'model': model or '(any)',
+                'cost_per_1k_input': in_cost,
+                'cost_per_1k_output': out_cost,
+                'estimated_per_call': in_cost + out_cost * 0.5,
+            })
+        return sorted(result, key=lambda x: x['estimated_per_call'])

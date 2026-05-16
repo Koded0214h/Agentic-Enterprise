@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   RiRocketLine, RiFileTextLine, RiMegaphoneLine, RiSearchLine,
   RiSendPlaneLine, RiServerLine, RiCloseLine, RiPlayLine,
-  RiArrowDownSLine, RiFileCopyLine,
+  RiArrowDownSLine, RiFileCopyLine, RiLineChartLine, RiBarChart2Line,
 } from 'react-icons/ri'
 import { api } from '../../api/client'
 import './WorkflowTemplates.css'
@@ -64,12 +64,32 @@ const TEMPLATES = [
     color: '#34d399',
     tag: 'advanced',
   },
+  {
+    id: 'launch-landing-page',
+    name: 'Launch Landing Page',
+    desc: 'Generate, design, and deploy a high-converting landing page. Includes copy, SEO, and deployment.',
+    agents: 4,
+    Icon: RiLineChartLine,
+    color: '#f472b6',
+    tag: 'Growth',
+  },
+  {
+    id: 'setup-analytics-stack',
+    name: 'Setup Analytics Stack',
+    desc: 'Configure product analytics, user tracking, funnel analysis, and dashboards for data-driven decisions.',
+    agents: 3,
+    Icon: RiBarChart2Line,
+    color: '#38bdf8',
+    tag: 'Engineering',
+  },
 ]
 
 const TAG_COLORS = {
-  popular:  { bg: 'rgba(170,59,255,0.12)', border: 'rgba(170,59,255,0.3)', color: 'var(--accent)' },
-  quick:    { bg: 'rgba(61,255,160,0.08)', border: 'rgba(61,255,160,0.2)', color: 'var(--green)' },
-  advanced: { bg: 'rgba(107,156,255,0.1)', border: 'rgba(107,156,255,0.25)', color: '#6b9cff' },
+  popular:     { bg: 'rgba(170,59,255,0.12)', border: 'rgba(170,59,255,0.3)', color: 'var(--accent)' },
+  quick:       { bg: 'rgba(61,255,160,0.08)', border: 'rgba(61,255,160,0.2)', color: 'var(--green)' },
+  advanced:    { bg: 'rgba(107,156,255,0.1)', border: 'rgba(107,156,255,0.25)', color: '#6b9cff' },
+  Growth:      { bg: 'rgba(244,114,182,0.1)', border: 'rgba(244,114,182,0.25)', color: '#f472b6' },
+  Engineering: { bg: 'rgba(56,189,248,0.1)', border: 'rgba(56,189,248,0.25)', color: '#38bdf8' },
 }
 
 export default function WorkflowTemplates() {

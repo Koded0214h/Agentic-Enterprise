@@ -56,3 +56,88 @@
 
 .inbox-arrow { color: var(--text); transition: color 0.14s, transform 0.14s; }
 .inbox-card:hover .inbox-arrow { color: var(--accent); transform: translateX(2px); }
+
+/* Tabs */
+.inbox-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+  margin-bottom: 4px;
+}
+.inbox-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.14s, border-color 0.14s;
+  margin-bottom: -1px;
+}
+.inbox-tab:hover { color: var(--text-h); }
+.inbox-tab--active { color: var(--accent); border-bottom-color: var(--accent); }
+.inbox-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+.inbox-tab-count--red {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+/* Escalated card */
+.inbox-escalated-card { align-items: flex-start; }
+
+.inbox-escalated-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--amber-dim);
+  border: 1px solid rgba(255,176,61,0.3);
+}
+
+.inbox-escalated-reason {
+  font-size: 12px;
+  color: var(--text);
+  font-style: italic;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.inbox-escalated-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.inbox-override-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 6px;
+}
+.inbox-override-approve { color: var(--green) !important; border-color: rgba(61,255,160,0.3) !important; }
+.inbox-override-approve:hover { background: var(--green-dim) !important; }
+.inbox-override-reject { color: var(--red) !important; border-color: rgba(255,92,122,0.3) !important; }
+.inbox-override-reject:hover { background: var(--red-dim) !important; }

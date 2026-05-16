@@ -1,14 +1,15 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.http import FileResponse
+from django_filters.rest_framework import DjangoFilterBackend
 
-
-from .models import KnowledgeCollection, Document, QueryLog
+from .models import KnowledgeCollection, Document, QueryLog, MemoryTag
 from .serializers import (
-    KnowledgeCollectionSerializer, 
+    KnowledgeCollectionSerializer,
     DocumentSerializer,
     QueryLogSerializer,
+    MemoryTagSerializer,
     QuerySerializer
 )
 from .services.document_processor import DocumentProcessor
@@ -80,7 +81,7 @@ class KnowledgeCollectionViewSet(viewsets.ModelViewSet):
     def revoke_access(self, request, pk=None):
         collection = self.get_object()
         agent_id = request.data.get('agent_id')
-        
+
         try:
             agent = Agent.objects.get(id=agent_id, owner=request.user)
             collection.agents.remove(agent)
@@ -90,6 +91,28 @@ class KnowledgeCollectionViewSet(viewsets.ModelViewSet):
                 {'error': 'Agent not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+    @action(detail=True, methods=['post'])
+    def add_tag(self, request, pk=None):
+        collection = self.get_object()
+        tag_id = request.data.get('tag_id')
+        try:
+            tag = MemoryTag.objects.get(id=tag_id, owner=request.user)
+            collection.tags.add(tag)
+            return Response({'status': 'tag added'})
+        except MemoryTag.DoesNotExist:
+            return Response({'error': 'Tag not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=['post'])
+    def remove_tag(self, request, pk=None):
+        collection = self.get_object()
+        tag_id = request.data.get('tag_id')
+        try:
+            tag = MemoryTag.objects.get(id=tag_id, owner=request.user)
+            collection.tags.remove(tag)
+            return Response({'status': 'tag removed'})
+        except MemoryTag.DoesNotExist:
+            return Response({'error': 'Tag not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class DocumentViewSet(viewsets.ModelViewSet):
@@ -139,10 +162,24 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
 class QueryLogViewSet(viewsets.ReadOnlyModelViewSet):
     """View query history"""
-    
+
     queryset = QueryLog.objects.all()
     serializer_class = QueryLogSerializer
     permission_classes = [permissions.IsAuthenticated]
-    
+
     def get_queryset(self):
-        return self.queryset.filter(collection__owner=self.request.user)
+        return self.queryset.filter(agent__owner=self.request.user).order_by('-created_at')
+
+
+class MemoryTagViewSet(viewsets.ModelViewSet):
+    """CRUD for memory tags."""
+
+    queryset = MemoryTag.objects.all()
+    serializer_class = MemoryTagSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(owner=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)

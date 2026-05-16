@@ -347,6 +347,7 @@ class PendingAction(models.Model):
             ('APPROVED', 'Approved'),
             ('DENIED', 'Denied'),
             ('EXPIRED', 'Expired'),
+            ('ESCALATED', 'Escalated'),
         ],
         default='PENDING'
     )

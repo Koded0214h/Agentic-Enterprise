@@ -3,7 +3,7 @@ import {
   RiEyeLine, RiRadioButtonLine, RiFileSearchLine, RiAlertLine, RiShieldLine,
   RiCheckLine, RiCloseLine, RiTimeLine, RiRefreshLine, RiArrowRightSLine,
   RiPulseLine, RiErrorWarningLine, RiInformationLine, RiBarChart2Line,
-  RiLineChartLine, RiListCheck2, RiSpeedLine,
+  RiLineChartLine, RiListCheck2, RiSpeedLine, RiFlowChart, RiShareLine,
 } from 'react-icons/ri'
 import { observe } from '../../api/observe'
 import { agents as agentsAPI } from '../../api/agents'
@@ -17,6 +17,9 @@ const TABS = [
   { id: 'anomalies',label: 'Anomalies',         Icon: RiAlertLine },
   { id: 'breakers', label: 'Circuit Breakers',  Icon: RiShieldLine },
   { id: 'metrics',  label: 'Metrics',           Icon: RiBarChart2Line },
+  { id: 'failures', label: 'Failure Analytics', Icon: RiErrorWarningLine },
+  { id: 'retries',  label: 'Task Performance',  Icon: RiRefreshLine },
+  { id: 'graph',    label: 'Workflow Graph',     Icon: RiFlowChart },
 ]
 
 const RISK_ICON = { green: <RiCheckLine size={13} color="var(--green)" />, amber: <RiErrorWarningLine size={13} color="var(--amber)" />, red: <RiCloseLine size={13} color="var(--red)" /> }
@@ -61,6 +64,9 @@ export default function Observe() {
       {tab === 'anomalies'&& <Anomalies />}
       {tab === 'breakers' && <CircuitBreakers />}
       {tab === 'metrics'  && <MetricsDashboard />}
+      {tab === 'failures' && <FailureAnalytics />}
+      {tab === 'retries'  && <TaskPerformance />}
+      {tab === 'graph'    && <WorkflowGraph />}
     </div>
   )
 }
@@ -753,6 +759,302 @@ function MetricsDashboard() {
               <span className="obs-runtime-label">Failed</span>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FailureAnalytics() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    observe.failureAnalytics()
+      .then(d => setData(d))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return <div className="obs-empty"><div className="aos-loader" style={{ minHeight: 'unset' }}><span /></div></div>
+  }
+
+  if (!data) {
+    return <EmptyState icon={<RiErrorWarningLine size={32} />} text="Could not load failure analytics." />
+  }
+
+  const maxAgentCount = Math.max(1, ...(data.failed_by_agent || []).map(a => a.count))
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* KPI chips */}
+      <div className="obs-kpi-row">
+        <div className="obs-kpi-chip">
+          <span className="obs-kpi-val">{data.total_tasks ?? 0}</span>
+          <span className="obs-kpi-label">Total Tasks</span>
+        </div>
+        <div className="obs-kpi-chip">
+          <span className="obs-kpi-val" style={{ color: 'var(--red)' }}>{data.total_failed ?? 0}</span>
+          <span className="obs-kpi-label">Total Failed</span>
+        </div>
+        <div className="obs-kpi-chip">
+          <span className="obs-kpi-val" style={{ color: data.failure_rate > 25 ? 'var(--red)' : data.failure_rate > 10 ? 'var(--amber)' : 'var(--green)' }}>
+            {data.failure_rate ?? 0}%
+          </span>
+          <span className="obs-kpi-label">Failure Rate</span>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {/* Failures by agent */}
+        <div className="card">
+          <div className="obs-metrics-head">
+            <RiErrorWarningLine size={15} />
+            <span>Failures by Agent</span>
+          </div>
+          {(data.failed_by_agent || []).length === 0 ? (
+            <EmptyState icon={<RiCheckLine size={24} />} text="No agent failures." />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {data.failed_by_agent.map(a => (
+                <div key={a.agent_id} className="obs-bar-list-row">
+                  <div className="obs-bar-list-label">{a.agent_name}</div>
+                  <div className="obs-bar-list-track">
+                    <div
+                      className="obs-bar-list-fill"
+                      style={{ width: `${(a.count / maxAgentCount) * 100}%`, background: 'var(--red)' }}
+                    />
+                  </div>
+                  <div className="obs-bar-list-count">{a.count}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Top error patterns */}
+        <div className="card">
+          <div className="obs-metrics-head">
+            <RiAlertLine size={15} />
+            <span>Top Error Patterns</span>
+          </div>
+          {(data.top_errors || []).length === 0 ? (
+            <EmptyState icon={<RiCheckLine size={24} />} text="No error patterns found." />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {data.top_errors.map((e, i) => (
+                <div key={i} className="obs-error-row">
+                  <div className="obs-error-msg" title={e.error}>{e.error || 'Unknown error'}</div>
+                  <span className="obs-error-count">{e.count}×</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const STATUS_COLORS = {
+  COMPLETED: 'var(--green)',
+  FAILED: 'var(--red)',
+  PENDING: 'var(--amber)',
+  IN_PROGRESS: 'var(--accent)',
+  BLOCKED: 'var(--text)',
+}
+
+function TaskPerformance() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    observe.retryAnalytics()
+      .then(d => setData(d))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return <div className="obs-empty"><div className="aos-loader" style={{ minHeight: 'unset' }}><span /></div></div>
+  }
+
+  if (!data) {
+    return <EmptyState icon={<RiRefreshLine size={32} />} text="Could not load task performance data." />
+  }
+
+  const breakdown = data.task_status_breakdown || []
+  const total = breakdown.reduce((s, b) => s + b.count, 0)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Stacked bar */}
+      <div className="card">
+        <div className="obs-metrics-head">
+          <RiBarChart2Line size={15} />
+          <span>Task Status Breakdown</span>
+          {total > 0 && <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text)', fontWeight: 400 }}>{total} total tasks</span>}
+        </div>
+        {total === 0 ? (
+          <EmptyState icon={<RiListCheck2 size={24} />} text="No tasks recorded yet." />
+        ) : (
+          <>
+            <div className="obs-stacked-bar">
+              {breakdown.filter(b => b.count > 0).map(b => (
+                <div
+                  key={b.status}
+                  className="obs-stacked-seg"
+                  style={{ width: `${(b.count / total) * 100}%`, background: STATUS_COLORS[b.status] || 'var(--border)' }}
+                  title={`${b.status}: ${b.count}`}
+                />
+              ))}
+            </div>
+            <div className="obs-stacked-legend">
+              {breakdown.map(b => (
+                <div key={b.status} className="obs-stacked-legend-item">
+                  <span className="obs-legend-dot" style={{ background: STATUS_COLORS[b.status] || 'var(--border)' }} />
+                  <span>{b.status.replace('_', ' ')}</span>
+                  <span style={{ color: 'var(--text-h)', fontWeight: 700, marginLeft: 4 }}>{b.count}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Agent performance table */}
+      <div className="card" style={{ padding: 0 }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+          <div className="obs-metrics-head" style={{ marginBottom: 0 }}>
+            <RiSpeedLine size={15} />
+            <span>Agent Performance</span>
+          </div>
+        </div>
+        {(data.agent_performance || []).length === 0 ? (
+          <EmptyState icon={<RiListCheck2 size={24} />} text="No agent performance data yet." />
+        ) : (
+          <table className="obs-perf-table">
+            <thead>
+              <tr>
+                <th>Agent</th>
+                <th>Total</th>
+                <th>Completed</th>
+                <th>Failed</th>
+                <th>Success Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.agent_performance.map((a, i) => {
+                const rateColor = a.success_rate >= 80 ? 'var(--green)' : a.success_rate >= 50 ? 'var(--amber)' : 'var(--red)'
+                return (
+                  <tr key={i}>
+                    <td style={{ fontWeight: 600, color: 'var(--text-h)' }}>{a.agent_name}</td>
+                    <td>{a.total}</td>
+                    <td style={{ color: 'var(--green)' }}>{a.completed}</td>
+                    <td style={{ color: a.failed > 0 ? 'var(--red)' : 'var(--text)' }}>{a.failed}</td>
+                    <td>
+                      <span style={{ color: rateColor, fontWeight: 700 }}>{a.success_rate}%</span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function WorkflowGraph() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    observe.workflowGraph()
+      .then(d => setData(d))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return <div className="obs-empty"><div className="aos-loader" style={{ minHeight: 'unset' }}><span /></div></div>
+  }
+
+  if (!data) {
+    return <EmptyState icon={<RiFlowChart size={32} />} text="Could not load workflow graph." />
+  }
+
+  const nodes = data.nodes || []
+  const edges = data.edges || []
+
+  if (nodes.length === 0) {
+    return <EmptyState icon={<RiFlowChart size={32} />} text="No workflow tasks yet. Run a DAG workflow to see the graph." />
+  }
+
+  // Build adjacency: node id -> list of dep node ids (from)
+  const depsOf = {}
+  nodes.forEach(n => { depsOf[n.id] = [] })
+  edges.forEach(e => {
+    if (depsOf[e.to]) depsOf[e.to].push(e.from)
+  })
+
+  // Build label lookup
+  const nodeById = {}
+  nodes.forEach(n => { nodeById[n.id] = n })
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="card">
+        <div className="obs-metrics-head">
+          <RiFlowChart size={15} />
+          <span>Workflow Task Graph</span>
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text)', fontWeight: 400 }}>
+            {nodes.length} nodes · {edges.length} edges
+          </span>
+        </div>
+
+        {/* Legend */}
+        <div className="obs-stacked-legend" style={{ marginBottom: 16 }}>
+          {Object.entries(STATUS_COLORS).map(([s, c]) => (
+            <div key={s} className="obs-stacked-legend-item">
+              <span className="obs-legend-dot" style={{ background: c }} />
+              <span>{s.replace('_', ' ')}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {nodes.map(node => {
+            const depNodes = depsOf[node.id]?.map(id => nodeById[id]).filter(Boolean) || []
+            return (
+              <div key={node.id} className="obs-graph-node">
+                <div className="obs-graph-node-header">
+                  <span
+                    className="obs-graph-status-dot"
+                    style={{ background: STATUS_COLORS[node.status] || 'var(--border)' }}
+                  />
+                  <span className="obs-graph-label">{node.label}</span>
+                  <span className="obs-graph-agent">{node.agent_name}</span>
+                  <span className={`badge badge-${node.status === 'COMPLETED' ? 'green' : node.status === 'FAILED' ? 'red' : node.status === 'IN_PROGRESS' ? 'blue' : 'amber'}`} style={{ fontSize: 10 }}>
+                    {node.status?.toLowerCase().replace('_', ' ')}
+                  </span>
+                </div>
+                {depNodes.length > 0 && (
+                  <div className="obs-graph-deps">
+                    <span className="obs-graph-dep-label">depends on:</span>
+                    {depNodes.map(d => (
+                      <span key={d.id} className="obs-graph-dep-chip">
+                        <span className="obs-legend-dot" style={{ background: STATUS_COLORS[d.status] || 'var(--border)', width: 7, height: 7 }} />
+                        {d.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>

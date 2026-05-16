@@ -9,6 +9,7 @@ import {
 import { useAuth } from '../../context/AuthContext'
 import { agents as agentsAPI } from '../../api/agents'
 import SwarmRunDrawer from '../../components/SwarmRunDrawer'
+import NotificationBell from './NotificationBell'
 import './AppShell.css'
 
 function buildNav(pendingCount) {
@@ -148,6 +149,7 @@ export default function AppShell() {
               <span className="dot dot-green dot-pulse" />
               <span>{activeCount} agent{activeCount !== 1 ? 's' : ''} active</span>
             </div>
+            <NotificationBell />
             <div className="shell-bell-wrap" ref={bellRef}>
               <button
                 className="shell-bell"

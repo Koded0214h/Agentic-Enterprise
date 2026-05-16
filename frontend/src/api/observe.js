@@ -16,6 +16,10 @@ export const observe = {
   executionReplay: (executionId) =>
     api.get(`/swarm/executions/${executionId}/replay/`),
 
+  failureAnalytics: () => api.get('/intelligence/analytics/failures/'),
+  retryAnalytics: () => api.get('/intelligence/analytics/retries/'),
+  workflowGraph: () => api.get('/intelligence/analytics/workflow-graph/'),
+
   /**
    * Open an SSE stream for a native execution.
    * Returns an EventSource. Caller must call .close() when done.
