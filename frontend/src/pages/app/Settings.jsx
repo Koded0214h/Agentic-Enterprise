@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  RiUserLine, RiKeyLine, RiShieldLockLine, RiBellLine, RiBuilding2Line,
+  RiUserLine, RiKeyLine, RiShieldKeyholeLine, RiBellLine, RiBuilding2Line,
   RiCheckLine, RiCloseLine, RiAddLine, RiTeamLine,
 } from 'react-icons/ri'
 import { api } from '../../api/client'
@@ -10,7 +10,7 @@ import './Settings.css'
 const TABS = [
   { id: 'profile',       label: 'Profile',        Icon: RiUserLine },
   { id: 'providers',     label: 'Providers',       Icon: RiKeyLine },
-  { id: 'security',      label: 'Security',        Icon: RiShieldLockLine },
+  { id: 'security',      label: 'Security',        Icon: RiShieldKeyholeLine },
   { id: 'notifications', label: 'Notifications',   Icon: RiBellLine },
   { id: 'workspace',     label: 'Workspace',       Icon: RiBuilding2Line },
 ]
