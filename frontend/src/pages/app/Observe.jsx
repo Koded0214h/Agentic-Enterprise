@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   RiEyeLine, RiRadioButtonLine, RiFileSearchLine, RiAlertLine, RiShieldLine,
   RiCheckLine, RiCloseLine, RiTimeLine, RiRefreshLine, RiArrowRightSLine,
@@ -156,10 +156,36 @@ function ActivityFeed() {
   )
 }
 
+const EVENT_LABEL = {
+  'task.started':      { label: 'Task started',    color: 'var(--accent)' },
+  'task.completed':    { label: 'Task done',        color: 'var(--green)' },
+  'task.failed':       { label: 'Task failed',      color: 'var(--red)' },
+  'agent.started':     { label: 'Agent running',    color: 'var(--accent)' },
+  'agent.completed':   { label: 'Agent done',       color: 'var(--green)' },
+  'agent.failed':      { label: 'Agent failed',     color: 'var(--red)' },
+  'llm.request':       { label: 'LLM call',         color: 'var(--text-muted)' },
+  'llm.response':      { label: 'LLM response',     color: 'var(--text-muted)' },
+  'tool.called':       { label: 'Tool called',      color: 'var(--amber)' },
+  'tool.completed':    { label: 'Tool done',        color: 'var(--green)' },
+  'tool.failed':       { label: 'Tool failed',      color: 'var(--red)' },
+  'tool.retried':      { label: 'Tool retry',       color: 'var(--amber)' },
+  'policy.checked':    { label: 'Policy checked',   color: 'var(--text-muted)' },
+  'policy.denied':     { label: 'Policy denied',    color: 'var(--red)' },
+  'hitl.raised':       { label: 'HITL escalated',   color: 'var(--amber)' },
+  'memory.loaded':     { label: 'Memory loaded',    color: 'var(--text-muted)' },
+  'recovery.strategy': { label: 'Self-healing',     color: 'var(--amber)' },
+  'trace.step':        { label: 'Trace step',       color: 'var(--text-muted)' },
+}
+
 function LiveMonitor() {
   const [tasks, setTasks] = useState([])
   const [agents, setAgents] = useState([])
   const [loading, setLoading] = useState(true)
+  const [selectedExec, setSelectedExec] = useState(null)
+  const [liveEvents, setLiveEvents] = useState([])
+  const [streaming, setStreaming] = useState(false)
+  const esRef = useRef(null)
+  const feedRef = useRef(null)
 
   const refresh = useCallback(() => {
     Promise.all([
@@ -178,55 +204,122 @@ function LiveMonitor() {
     return () => clearInterval(id)
   }, [refresh])
 
+  const openStream = useCallback((executionId) => {
+    if (esRef.current) esRef.current.close()
+    setSelectedExec(executionId)
+    setLiveEvents([])
+    setStreaming(true)
+
+    esRef.current = observe.streamExecution(
+      executionId,
+      (event) => {
+        setLiveEvents(prev => {
+          const next = [...prev, event].slice(-200) // keep last 200 events
+          return next
+        })
+        // auto-scroll feed
+        requestAnimationFrame(() => {
+          if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight
+        })
+      },
+      () => setStreaming(false),
+      () => setStreaming(false),
+    )
+  }, [])
+
+  useEffect(() => () => esRef.current?.close(), [])
+
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="dot dot-green dot-pulse" style={{ width: 8, height: 8 }} />
-          <span style={{ fontSize: 12, color: 'var(--text)' }}>Auto-refreshes every 5s</span>
+    <div style={{ display: 'grid', gridTemplateColumns: selectedExec ? '1fr 1fr' : '1fr', gap: 16 }}>
+      {/* Agent / task list */}
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="dot dot-green dot-pulse" style={{ width: 8, height: 8 }} />
+            <span style={{ fontSize: 12, color: 'var(--text)' }}>Auto-refreshes every 5s</span>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={refresh}><RiRefreshLine size={13} /> Refresh</button>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={refresh}><RiRefreshLine size={13} /> Refresh</button>
+
+        {loading ? (
+          <div className="obs-empty"><div className="aos-loader" style={{ minHeight: 'unset' }}><span /></div></div>
+        ) : agents.length === 0 && tasks.length === 0 ? (
+          <EmptyState icon={<RiRadioButtonLine size={32} />} text="No agents currently executing. Start a workflow to see live activity here." />
+        ) : (
+          <div className="card" style={{ padding: 0 }}>
+            <table className="obs-live-table">
+              <thead>
+                <tr>
+                  <th>Agent</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Source</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {agents.map(a => (
+                  <tr key={a.id} style={{ cursor: a.execution_id ? 'pointer' : 'default', background: selectedExec === a.execution_id ? 'var(--surface-2)' : '' }}
+                      onClick={() => a.execution_id && openStream(a.execution_id)}>
+                    <td><div className="obs-live-agent">{a.name}</div></td>
+                    <td><span className="obs-live-mono">{a.agent_type}</span></td>
+                    <td>
+                      <span className="badge badge-green">
+                        <span className="dot dot-green dot-pulse" style={{ width: 6, height: 6 }} />
+                        running
+                      </span>
+                    </td>
+                    <td>{a.source}</td>
+                    <td>
+                      {a.execution_id && (
+                        <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); openStream(a.execution_id) }}>
+                          <RiPulseLine size={12} /> Stream
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {loading ? (
-        <div className="obs-empty"><div className="aos-loader" style={{ minHeight: 'unset' }}><span /></div></div>
-      ) : agents.length === 0 && tasks.length === 0 ? (
-        <EmptyState icon={<RiRadioButtonLine size={32} />} text="No agents currently executing. Start a workflow to see live activity here." />
-      ) : (
-        <div className="card" style={{ padding: 0 }}>
-          <table className="obs-live-table">
-            <thead>
-              <tr>
-                <th>Agent</th>
-                <th>Type</th>
-                <th>Environment</th>
-                <th>Status</th>
-                <th>Source</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {agents.map(a => (
-                <tr key={a.id}>
-                  <td>
-                    <div className="obs-live-agent">{a.name}</div>
-                  </td>
-                  <td><span className="obs-live-mono">{a.agent_type}</span></td>
-                  <td>{a.environment}</td>
-                  <td>
-                    <span className="badge badge-green">
-                      <span className="dot dot-green dot-pulse" style={{ width: 6, height: 6 }} />
-                      running
-                    </span>
-                  </td>
-                  <td>{a.source}</td>
-                  <td>
-                    <button className="btn btn-ghost btn-sm">Pause</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Live event feed — shown when an execution is selected */}
+      {selectedExec && (
+        <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column', maxHeight: 520 }}>
+          <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {streaming && <span className="dot dot-green dot-pulse" style={{ width: 7, height: 7 }} />}
+              <span style={{ fontSize: 12, fontWeight: 600 }}>
+                {streaming ? 'Live stream' : 'Stream ended'} — {String(selectedExec).slice(0, 8)}
+              </span>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => { esRef.current?.close(); setSelectedExec(null); setLiveEvents([]) }}>
+              <RiCloseLine size={13} />
+            </button>
+          </div>
+          <div ref={feedRef} style={{ overflowY: 'auto', flex: 1, padding: '8px 0' }}>
+            {liveEvents.length === 0 ? (
+              <div style={{ padding: 16, color: 'var(--text-muted)', fontSize: 12 }}>Waiting for events…</div>
+            ) : liveEvents.map((ev, i) => {
+              const meta = EVENT_LABEL[ev.event_type] || { label: ev.event_type, color: 'var(--text-muted)' }
+              return (
+                <div key={i} style={{ padding: '4px 14px', display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 12 }}>
+                  <span style={{ color: meta.color, fontWeight: 600, minWidth: 120, flexShrink: 0 }}>{meta.label}</span>
+                  <span style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: 11, wordBreak: 'break-all' }}>
+                    {ev.duration_ms != null ? `${ev.duration_ms}ms · ` : ''}
+                    {ev.payload?.tool || ev.payload?.node || ev.payload?.output_length != null ? `${ev.payload.output_length} chars` : ''}
+                    {ev.payload?.tokens_in ? ` · ${ev.payload.tokens_in}+${ev.payload.tokens_out} tok` : ''}
+                    {ev.payload?.error ? ` ⚠ ${ev.payload.error}` : ''}
+                  </span>
+                  <span style={{ color: 'var(--text-muted)', opacity: 0.5, marginLeft: 'auto', fontSize: 10, flexShrink: 0 }}>
+                    {ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : ''}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>

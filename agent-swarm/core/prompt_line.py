@@ -199,6 +199,7 @@ def expand_prompt_chips(text: str, stash: dict[int, str]) -> str:
 def read_prompt_line(message: str = "", *, show_hint: bool = True) -> str:
     """Read one user message; chips expanded on submit. Empty string on ^C/^D."""
     if not _stdout_tty():
+        sys.stdout.flush()  # flush buffered output (e.g. questions box) before blocking on stdin
         try:
             line = sys.stdin.readline()
         except (KeyboardInterrupt, EOFError):

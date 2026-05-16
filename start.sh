@@ -140,6 +140,7 @@ cat > "$SWARM_DIR/.env" << EOF
 AOS_BASE_URL=http://localhost:$AOS_PORT
 AOS_TOKEN=$AOS_TOKEN
 AOS_ENV=dev
+DEV=false
 EOF
 success "agent-swarm/.env updated with fresh token"
 

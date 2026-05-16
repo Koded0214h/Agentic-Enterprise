@@ -18,6 +18,8 @@ import AgentsPage from './pages/app/AgentsPage'
 import Observe from './pages/app/Observe'
 import Finance from './pages/app/Finance'
 import IAMPage from './pages/app/IAMPage'
+import TermsOfService from './pages/TermsOfService'
+import PrivacyPolicy from './pages/PrivacyPolicy'
 
 export default function App() {
   return (
@@ -25,6 +27,8 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Landing />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route

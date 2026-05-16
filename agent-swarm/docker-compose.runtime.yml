@@ -1,0 +1,104 @@
+# AOS Native Runtime — Docker Compose extension
+# Adds native execution workers alongside the existing backend + frontend.
+#
+# Usage (start everything):
+#   docker-compose -f ../docker-compose.yml -f docker-compose.runtime.yml up
+#
+# Or standalone runtime workers:
+#   docker-compose -f docker-compose.runtime.yml up
+
+version: "3.9"
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Celery worker — standard priority queue
+  # ---------------------------------------------------------------------------
+  runtime-worker-standard:
+    build:
+      context: .
+      dockerfile: Dockerfile.runtime
+    image: aos-runtime:latest
+    command: >
+      celery -A runtime.jobs worker
+        --loglevel=info
+        --queues=agent.execute.standard,agent.execute.batch
+        --concurrency=4
+        --hostname=standard@%h
+    volumes:
+      - workspace_data:/workspace
+      - ./memory:/app/memory
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - AOS_BASE_URL=${AOS_BASE_URL:-http://backend:8000}
+      - AOS_TOKEN=${AOS_TOKEN}
+      - AOS_ENV=${AOS_ENV:-prod}
+    depends_on:
+      - redis
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  # ---------------------------------------------------------------------------
+  # Celery worker — critical priority queue (HITL-approved, high-risk)
+  # ---------------------------------------------------------------------------
+  runtime-worker-critical:
+    build:
+      context: .
+      dockerfile: Dockerfile.runtime
+    image: aos-runtime:latest
+    command: >
+      celery -A runtime.jobs worker
+        --loglevel=info
+        --queues=agent.execute.critical
+        --concurrency=2
+        --hostname=critical@%h
+    volumes:
+      - workspace_data:/workspace
+      - ./memory:/app/memory
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - AOS_BASE_URL=${AOS_BASE_URL:-http://backend:8000}
+      - AOS_TOKEN=${AOS_TOKEN}
+      - AOS_ENV=${AOS_ENV:-prod}
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Flower — Celery queue monitor (dev/ops visibility)
+  # ---------------------------------------------------------------------------
+  flower:
+    image: mher/flower:2.0
+    command: celery flower --broker=${CELERY_BROKER_URL:-redis://redis:6379/0} --port=5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # ---------------------------------------------------------------------------
+  # Redis (if not provided externally)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  workspace_data:
+  redis_data:

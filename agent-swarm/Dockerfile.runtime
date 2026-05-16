@@ -1,0 +1,37 @@
+# AOS Native Runtime — Base Container Image
+# Tier 2 sandbox: Docker container per agent category
+#
+# Build: docker build -f Dockerfile.runtime -t aos-runtime:latest .
+# Run:   docker run --rm -e ANTHROPIC_API_KEY=... aos-runtime:latest
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# System deps shared by all agent categories
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl wget jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python deps
+COPY requirements-runtime.txt /app/
+RUN pip install --no-cache-dir -r requirements-runtime.txt
+
+# Copy swarm runtime code (not agents — those are mounted at runtime)
+COPY runtime/ /app/runtime/
+COPY core/ /app/core/
+COPY engines/ /app/engines/
+COPY agents/ /app/agents/
+COPY skills/ /app/skills/
+COPY memory/ /app/memory/
+
+# Non-root for security
+RUN groupadd -r swarm && useradd -r -g swarm swarm
+RUN chown -R swarm:swarm /app
+USER swarm
+
+# Workspace dir — mounted per job
+VOLUME ["/workspace"]
+ENV SWARM_HOME=/app/memory
+
+CMD ["python3", "-c", "import time; time.sleep(86400)"]

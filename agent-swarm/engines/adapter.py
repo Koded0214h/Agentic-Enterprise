@@ -165,12 +165,10 @@ class ClaudeCodeEngine(BaseEngine):
         if cls.system_prompt_flag:
             cmd.extend([cls.system_prompt_flag, str(prompt_file)])
         if headless:
-            # --bare skips hooks/plugins/CLAUDE.md discovery; --no-session-persistence
-            # avoids disk I/O — together they shave ~1-2s off each agent cold-start.
-            cmd.extend(["--print", "--bare", "--no-session-persistence"])
+            cmd.append("--print")
         model = os.environ.get("SWARM_CLAUDE_MODEL", "").strip()
         if model:
-            cmd.extend(["-m", model])
+            cmd.extend(["--model", model])
         cmd.append(task)
         return cmd
 
@@ -178,7 +176,7 @@ class ClaudeCodeEngine(BaseEngine):
     def augment_with_model(cls, argv: list, model: str) -> list:
         if not argv or not model:
             return argv
-        return [argv[0], "-m", model] + argv[1:]
+        return [argv[0], "--model", model] + argv[1:]
 
 
 class GeminiCLIEngine(BaseEngine):
@@ -419,3 +417,78 @@ def detect_all_available() -> list:
         if cls.command and shutil.which(cls.command.split()[0]):
             available.append(name)
     return available
+
+
+# ============================================================
+# NATIVE ENGINE  (Phase 1 rearchitecture — no subprocess)
+# ============================================================
+
+class NativeEngine(BaseEngine):
+    """
+    AOS native execution engine.
+    Calls runtime.run_agent() directly — no CLI subprocess.
+    Requires ANTHROPIC_API_KEY (or appropriate provider key) in env.
+
+    Use with: --engine native
+    Agent categories with native routing defined in runtime/providers.py.
+    """
+    name = "native"
+    command = ""       # no CLI binary — this engine is pure Python
+
+    @classmethod
+    def run(
+        cls,
+        agent_file: str,
+        task: str,
+        output_dir: str = ".",
+        *,
+        attach_stdio: bool = False,
+        cli_model: Optional[str] = None,
+    ) -> dict:
+        import asyncio
+        import sys
+        from pathlib import Path
+
+        swarm_root = Path(__file__).parent.parent
+        if str(swarm_root) not in sys.path:
+            sys.path.insert(0, str(swarm_root))
+
+        try:
+            from runtime import run_agent
+
+            # agent_file is e.g. "engineering/frontend-developer.md"
+            # strip category prefix and .md suffix to get agent name
+            agent_name = Path(agent_file).stem
+
+            result = asyncio.run(
+                run_agent(
+                    agent_name=agent_name,
+                    task=task,
+                    workspace_dir=output_dir,
+                    permissions=["file.read", "file.write", "shell.run", "github.read"],
+                )
+            )
+            return {
+                "stdout": result.output,
+                "stderr": result.error,
+                "returncode": 0 if result.success else 1,
+                "engine": "native",
+                "execution_id": result.execution_id,
+                "tokens_in": result.tokens_input,
+                "tokens_out": result.tokens_output,
+                "duration_ms": result.duration_ms,
+            }
+        except Exception as exc:
+            return {
+                "stdout": "",
+                "stderr": str(exc),
+                "returncode": 1,
+                "engine": "native",
+            }
+
+    @classmethod
+    def build_command(cls, system_prompt: str, task: str, *, headless: bool = True) -> list:
+        return []  # NativeEngine does not use subprocess commands
+
+
+ENGINES["native"] = NativeEngine

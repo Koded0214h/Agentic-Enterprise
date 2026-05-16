@@ -202,13 +202,23 @@ class ConversationViewSet(viewsets.ModelViewSet):
         content = request.data.get("content", "").strip()
 
         if decision == "ESCALATE":
+            # Snapshot full conversation history so resumption is reliable
+            # regardless of DB consistency at approval time.
+            prior_messages = list(
+                conversation.messages.order_by("created_at").values("role", "content")
+            )
             PendingAction.objects.create(
                 conversation=conversation,
                 agent=agent,
                 action_type="chat",
                 resource="agent:execute",
                 reason=reason,
-                state_snapshot={"content": content},
+                state_snapshot={
+                    "content": content,
+                    "messages": prior_messages,
+                    "agent_id": str(agent.id),
+                    "conversation_id": str(conversation.id),
+                },
             )
             conversation.status = "PENDING_APPROVAL"
             conversation.save()
@@ -340,7 +350,30 @@ class PendingActionViewSet(viewsets.ModelViewSet):
             start_time = time.time()
             try:
                 executor = LangGraphAgentFactory.create_agent(agent)
-                state = _build_agent_state(agent, agent.capability, conversation, content)
+
+                # Prefer snapshot-stored message history over DB query — more reliable
+                # on resume because the snapshot was taken at the exact moment of escalation.
+                snapshot_messages = pending.state_snapshot.get("messages")
+                if snapshot_messages:
+                    state = {
+                        "messages": [
+                            {
+                                "role": _ROLE_MAP.get(m["role"].upper(), "user"),
+                                "content": m["content"],
+                            }
+                            for m in snapshot_messages
+                        ] + [{"role": "user", "content": content}],
+                        "agent_id": str(agent.id),
+                        "conversation_id": str(conversation.id),
+                        "iterations": 0,
+                        "max_iterations": getattr(
+                            getattr(agent, "capability", None), "max_iterations", 10
+                        ),
+                    }
+                else:
+                    # Fallback: rebuild from DB (old behaviour)
+                    state = _build_agent_state(agent, agent.capability, conversation, content)
+
                 config = {"configurable": {"thread_id": str(conversation.id)}}
                 result = executor.invoke(state, config=config)
                 reply = _extract_reply(result)
@@ -408,7 +441,13 @@ class AgentExecuteView(views.APIView):
                 action_type="task",
                 resource="agent:execute",
                 reason=reason,
-                state_snapshot={"task": task},
+                state_snapshot={
+                    "task": task,
+                    "content": task,
+                    "messages": [{"role": "user", "content": task}],
+                    "agent_id": str(agent.id),
+                    "conversation_id": str(conversation.id),
+                },
             )
             return Response(
                 {

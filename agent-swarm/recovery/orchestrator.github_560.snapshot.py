@@ -210,28 +210,31 @@ def orchestrate(goal: str, engine: str = None, project_dir: str = ".", interacti
     # PHASE 1: QUESTIONNAIRE — Ask before you build
     # ═══════════════════════════════════════════════════════
     TUI.phase_header(1, "QUESTIONNAIRE", "Clarifying requirements")
-    spinner = Spinner("Questionnaire analyzing goal").start()
-    questions_result = dispatch_agent(
-        "questionnaire",
-        f"Analyze this goal and produce clarifying questions:\n\n{goal}\n\nProject directory: {workspace.get_path()}",
-        context=f"Project at {workspace.get_path()}. Be thorough about scope, users, data, auth, edge cases.",
-        engine_name=engine,
-        config=config,
-        workspace=workspace,
-    )
-    
-    if questions_result["status"] != "✅ SUCCESS":
-        spinner.stop(False, "Questionnaire failed")
-        TUI.warn("Clarification phase failed.")
-        if not TUI.confirm("Continue without clarifications?", default=True):
-            return {"error": "User chose to stop after questionnaire failure"}
-        clarified_requirements = f"Goal: {goal}\n(No clarifications — building based on goal alone)"
+    if os.environ.get("DEV", "").strip().lower() == "true":
+        TUI.info("DEV=true — skipping questionnaire, proceeding with goal as-is.")
+        clarified_requirements = f"Goal: {goal}\n(DEV mode — skipping clarifications)"
     else:
-        spinner.stop(True, "Questions ready")
-        raw_output = questions_result["output"]
-        TUI.info("Clarifying questions generated — answer them to help the swarm.")
-        # Always show the questionnaire box and collect user answers
-        clarified_requirements = TUI.questionnaire_box(raw_output)
+        spinner = Spinner("Questionnaire analyzing goal").start()
+        questions_result = dispatch_agent(
+            "questionnaire",
+            f"Analyze this goal and produce clarifying questions:\n\n{goal}\n\nProject directory: {workspace.get_path()}",
+            context=f"Project at {workspace.get_path()}. Be thorough about scope, users, data, auth, edge cases.",
+            engine_name=engine,
+            config=config,
+            workspace=workspace,
+        )
+
+        if questions_result["status"] != "✅ SUCCESS":
+            spinner.stop(False, "Questionnaire failed")
+            TUI.warn("Clarification phase failed.")
+            if not TUI.confirm("Continue without clarifications?", default=True):
+                return {"error": "User chose to stop after questionnaire failure"}
+            clarified_requirements = f"Goal: {goal}\n(No clarifications — building based on goal alone)"
+        else:
+            spinner.stop(True, "Questions ready")
+            raw_output = questions_result["output"]
+            TUI.info("Clarifying questions generated — answer them to help the swarm.")
+            clarified_requirements = TUI.questionnaire_box(raw_output)
     
     # ═══════════════════════════════════════════════════════
     # PHASE 2: PLANNER — Design the implementation
@@ -419,54 +422,52 @@ def parse_tasks(pm_output: str, goal: str, engine: str = None) -> list:
     """Parse PM output into dispatchable tasks"""
     tasks = []
     goal_lower = goal.lower()
-    
+
+    def task(agent, verb):
+        return {"agent": agent, "task": f"{verb}: {goal}", "context": pm_output, "engine": engine}
+
+    # ── Sales / GTM / Marketing ──────────────────────────────────────────────
+    if any(kw in goal_lower for kw in ["gtm", "go-to-market", "icp", "target account", "outbound", "sales strategy", "sales"]):
+        tasks += [
+            task("sales-account-strategist",  "Identify target accounts and buying committees for"),
+            task("sales-outbound-strategist",  "Write outbound email sequences for"),
+        ]
+
+    if any(kw in goal_lower for kw in ["marketing", "content", "growth", "seo", "brand", "campaign", "gtm", "go-to-market"]):
+        tasks += [
+            task("marketing-content-creator",  "Create marketing content for"),
+            task("marketing-growth-hacker",    "Design growth strategy for"),
+        ]
+
+    if any(kw in goal_lower for kw in ["vc", "investor", "pitch", "fundrais", "deck", "one-pager"]):
+        tasks.append(task("sales-proposal-strategist", "Draft investor-facing materials for"))
+
+    if any(kw in goal_lower for kw in ["product", "roadmap", "feature", "launch", "mvp"]):
+        tasks.append(task("product-manager", "Define product requirements for"))
+
+    if any(kw in goal_lower for kw in ["strategy", "plan", "framework", "competitive", "market research"]):
+        tasks.append(task("sales-deal-strategist", "Develop strategic framework for"))
+
+    # ── Engineering ──────────────────────────────────────────────────────────
     if any(kw in goal_lower for kw in ["website", "web app", "landing page", "frontend", "ui"]):
-        tasks.append({
-            "agent": "frontend-dev",
-            "task": f"Build the frontend for: {goal}",
-            "context": pm_output,
-            "engine": engine
-        })
-    
+        tasks.append(task("frontend-dev", "Build the frontend for"))
+
     if any(kw in goal_lower for kw in ["api", "backend", "server", "database", "auth"]):
-        tasks.append({
-            "agent": "backend-dev",
-            "task": f"Build the backend for: {goal}",
-            "context": pm_output,
-            "engine": engine
-        })
-    
+        tasks.append(task("backend-dev", "Build the backend for"))
+
     if any(kw in goal_lower for kw in ["deploy", "docker", "ci/cd", "pipeline", "hosting"]):
-        tasks.append({
-            "agent": "devops",
-            "task": f"Set up deployment for: {goal}",
-            "context": pm_output,
-            "engine": engine
-        })
-    
+        tasks.append(task("devops", "Set up deployment for"))
+
     if any(kw in goal_lower for kw in ["secure", "security", "audit"]):
-        tasks.append({
-            "agent": "security",
-            "task": f"Audit security for: {goal}",
-            "context": pm_output,
-            "engine": engine
-        })
-    
-    # Always add QA
-    tasks.append({
-        "agent": "qa-tester",
-        "task": f"Write tests for: {goal}",
-        "context": pm_output,
-        "engine": engine
-    })
-    
-    # Default: frontend + backend
+        tasks.append(task("security", "Audit security for"))
+
+    # ── Default: treat as engineering if nothing matched ─────────────────────
     if not tasks:
         tasks = [
-            {"agent": "frontend-dev", "task": f"Build the frontend for: {goal}", "context": pm_output, "engine": engine},
-            {"agent": "backend-dev", "task": f"Build the backend for: {goal}", "context": pm_output, "engine": engine},
+            task("frontend-dev", "Build the frontend for"),
+            task("backend-dev",  "Build the backend for"),
         ]
-    
+
     return tasks
 
 

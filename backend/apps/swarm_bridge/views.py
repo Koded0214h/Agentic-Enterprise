@@ -439,7 +439,8 @@ class SwarmExecutionContextDetailView(APIView):
         return Response(SwarmExecutionContextSerializer(ctx).data)
 
 
-_ANSI_RE = re.compile(r'\x1b\[[0-9;]*[mGKHF]')
+_ANSI_RE   = re.compile(r'\x1b\[[0-9;]*[mGKHF]')
+_SPINNER_RE = re.compile(r'^[\s⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏▏▎▍▌▋▊▉█▰▱✓✗⠐⠂⠄⠆⠃⠉⠘⠰⠤⠠⡀⢀|/\\-]+\s*')
 
 # agent-swarm lives two levels above backend/
 _SWARM_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "agent-swarm"
@@ -458,21 +459,26 @@ def _build_swarm_env():
             if raw and not raw.startswith("#") and "=" in raw:
                 k, v = raw.split("=", 1)
                 env[k.strip()] = v.strip()
+    # If ANTHROPIC_API_KEY is empty or not a real key, remove it so claude
+    # falls back to OAuth (the user's logged-in session) instead of failing
+    # with "Invalid API key".
+    if not env.get("ANTHROPIC_API_KEY", "").strip().startswith("sk-"):
+        env.pop("ANTHROPIC_API_KEY", None)
     return env
 
 
-def _stdout_reader(proc, run):
-    """Background thread: drain proc.stdout into run['lines'].
+def _sys_line(run, msg):
+    """Inject a system/diagnostic line into the run's line buffer."""
+    print(f"[swarm] {msg}", flush=True)
+    run["lines"].append({"type": "line", "content": f"[sys] {msg}"})
 
-    Handles two TUI patterns that produce noise:
-    - Carriage-return spinners: "\\r  ⠙  msg...\\r  ⠹  msg..." in one buffered chunk.
-      Split on \\r and keep only the last non-empty segment.
-    - Repeated identical lines: deduplicate consecutive identical spinner frames.
-    """
+
+def _stdout_reader(proc, run):
     try:
+        _sys_line(run, f"process started — PID {proc.pid}")
         last_clean = None
+        line_count = 0
         for raw_line in proc.stdout:
-            # Collapse \r-overwritten segments — keep last non-empty one
             segments = raw_line.split("\r")
             raw = ""
             for seg in reversed(segments):
@@ -486,15 +492,24 @@ def _stdout_reader(proc, run):
             if not clean:
                 continue
 
-            # Drop consecutive duplicates (spinner frames repeating same text)
-            if clean == last_clean:
+            # Deduplicate spinner frames: strip leading spinner/whitespace before comparing
+            key = _SPINNER_RE.sub("", clean).strip()
+            if key and key == _SPINNER_RE.sub("", last_clean or "").strip():
                 continue
             last_clean = clean
+            line_count += 1
 
+            # Don't forward pure spinner lines — only lines with real content
+            if not key:
+                continue
+
+            print(f"[swarm:{proc.pid}] {clean}", flush=True)
             run["lines"].append({"type": "line", "content": clean})
+
         proc.wait()
+        _sys_line(run, f"process exited — code {proc.returncode}, {line_count} lines captured")
     except Exception as exc:
-        run["lines"].append({"type": "error", "content": str(exc)})
+        _sys_line(run, f"reader error: {exc}")
     finally:
         run["done"] = True
         run["exit_code"] = proc.returncode
@@ -548,9 +563,20 @@ class SwarmRunView(APIView):
             env=env,
         )
 
-        run = {"proc": proc, "lines": [], "done": False, "exit_code": None, "goal": goal, "engine": engine, "model": model}
+        cmd_str = f"python3 orchestrator.py \"{goal}\" --engine {engine}"
+        if engine == "claude" and model in _CLAUDE_MODEL_MAP:
+            cmd_str += f" [model={_CLAUDE_MODEL_MAP[model]}]"
+
+        run = {
+            "proc": proc, "lines": [], "done": False, "exit_code": None,
+            "goal": goal, "engine": engine, "model": model,
+        }
+        run["lines"].append({"type": "line", "content": f"[sys] run {run_id[:8]} — {cmd_str}"})
+        run["lines"].append({"type": "line", "content": f"[sys] cwd: {_SWARM_ROOT}"})
+        run["lines"].append({"type": "line", "content": f"[sys] DEV={env.get('DEV', 'false')}"})
         _RUNS[run_id] = run
 
+        print(f"[swarm] launching: {cmd_str}", flush=True)
         t = threading.Thread(target=_stdout_reader, args=(proc, run), daemon=True)
         t.start()
 
@@ -595,6 +621,30 @@ class SwarmRunStreamView(APIView):
         return response
 
 
+class SwarmRunPollView(APIView):
+    """
+    GET /api/swarm/run/<run_id>/poll/?from=N
+    Returns lines[N:] as a plain JSON response. Frontend polls this every 500ms.
+    Works through any proxy — no streaming required.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, run_id):
+        run = _RUNS.get(run_id)
+        if not run:
+            return Response({"error": "Run not found"}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            from_idx = int(request.query_params.get("from", 0))
+        except (TypeError, ValueError):
+            from_idx = 0
+        return Response({
+            "lines": run["lines"][from_idx:],
+            "done": run["done"],
+            "exit_code": run["exit_code"],
+            "total": len(run["lines"]),
+        })
+
+
 class SwarmRunInputView(APIView):
     """
     POST /api/swarm/run/<run_id>/input/
@@ -636,4 +686,315 @@ class SwarmRunStatusView(APIView):
             "done": run["done"],
             "exit_code": run["exit_code"],
             "line_count": len(run["lines"]),
+        })
+
+
+class SwarmRunCancelView(APIView):
+    """
+    POST /api/swarm/run/<run_id>/cancel/
+    Terminate the orchestrator process for a running swarm run.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, run_id):
+        run = _RUNS.get(run_id)
+        if not run:
+            return Response({"error": "Run not found"}, status=status.HTTP_404_NOT_FOUND)
+        if run["done"]:
+            return Response({"detail": "Run already completed", "run_id": run_id})
+
+        proc = run.get("proc")
+        if proc and proc.poll() is None:
+            try:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    proc.kill()
+            except OSError:
+                pass
+
+        run["done"] = True
+        run["exit_code"] = -1
+        run["lines"].append({"type": "line", "content": "[sys] Run cancelled by user"})
+        run["lines"].append({"type": "done", "exit_code": -1, "cancelled": True})
+
+        return Response({"ok": True, "run_id": run_id, "detail": "Cancelled"})
+
+
+class ExecutionCancelView(APIView):
+    """
+    POST /api/swarm/executions/<execution_id>/cancel/
+    Cancel a native execution by setting a Redis cancellation flag.
+    The NativeAgentWorker checks this flag between iterations.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, execution_id):
+        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+        try:
+            import redis
+            r = redis.from_url(redis_url, decode_responses=True)
+            cancel_key = f"aos:cancel:{execution_id}"
+            r.set(cancel_key, "1", ex=3600)
+            r.publish(f"aos:events:{execution_id}", json.dumps({
+                "type": "task.cancelled",
+                "execution_id": str(execution_id),
+                "timestamp": timezone.now().isoformat(),
+            }))
+        except Exception:
+            pass
+
+        # Update DB record if it exists
+        try:
+            ctx = SwarmExecutionContext.objects.get(id=execution_id)
+            ctx.status = "CANCELLED"
+            ctx.save(update_fields=["status"])
+        except SwarmExecutionContext.DoesNotExist:
+            pass
+
+        return Response({"ok": True, "execution_id": str(execution_id), "detail": "Cancellation signal sent"})
+
+
+class CouncilReviewView(APIView):
+    """
+    POST /api/swarm/council/review/
+    Run a multi-agent council review on a proposed action.
+    Body: { "action": "...", "context": {...}, "reviewers": ["architecture", "security", ...] }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        action = request.data.get("action", "").strip()
+        if not action:
+            return Response({"detail": "action is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        context = request.data.get("context", {})
+        reviewers = request.data.get("reviewers") or None
+        execution_id = str(uuid.uuid4())
+
+        try:
+            import asyncio
+            import sys
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "agent-swarm"))
+            from runtime.council import CouncilCoordinator
+            coordinator = CouncilCoordinator()
+            decision = asyncio.run(coordinator.review(
+                proposed_action=action,
+                context=context,
+                execution_id=execution_id,
+                reviewers=reviewers,
+            ))
+            return Response(decision.as_dict)
+        except ImportError:
+            # Swarm runtime not available — return stub response
+            return Response({
+                "verdict": "CONDITIONAL_APPROVE",
+                "aggregate_score": 72.0,
+                "risk_level": "medium",
+                "summary": f"Council review stub: '{action[:80]}'. Install swarm runtime for full review.",
+                "conditions": ["Enable swarm runtime for full council review"],
+                "duration_ms": 0,
+                "opinions": [],
+            })
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ---------------------------------------------------------------------------
+# Native execution event stream (Phase 3)
+# ---------------------------------------------------------------------------
+
+class ExecutionEventStreamView(APIView):
+    """
+    GET /api/swarm/executions/<execution_id>/stream/
+
+    Server-Sent Events stream for a native execution.
+    Subscribers receive every AOSEvent emitted by the NativeAgentWorker
+    in real time via Redis pub/sub.
+
+    Falls back to polling TraceStep from the DB when Redis is not available.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, execution_id):
+        # EventSource API cannot set Authorization headers — accept token via query param.
+        token = request.query_params.get("token", "")
+        if token and not request.auth:
+            from rest_framework_simplejwt.authentication import JWTAuthentication
+            try:
+                from rest_framework.request import Request as DRFRequest
+                from django.http import HttpRequest
+                fake = HttpRequest()
+                fake.META["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+                validated = JWTAuthentication().authenticate(DRFRequest(fake))
+                if validated is None:
+                    return Response({"error": "Unauthorized"}, status=401)
+            except Exception:
+                return Response({"error": "Unauthorized"}, status=401)
+
+        redis_url = os.environ.get("REDIS_URL", os.environ.get("CELERY_BROKER_URL", ""))
+        if redis_url:
+            return self._stream_from_redis(request, str(execution_id), redis_url)
+        return self._stream_from_db(request, str(execution_id))
+
+    def _stream_from_redis(self, request, execution_id: str, redis_url: str):
+        def _generate():
+            try:
+                import redis
+                r = redis.from_url(redis_url, decode_responses=True)
+                pubsub = r.pubsub()
+                pubsub.subscribe(f"aos:events:{execution_id}")
+                yield f"data: {json.dumps({'type': 'connected', 'execution_id': execution_id})}\n\n"
+                last_ping = time.time()
+                for message in pubsub.listen():
+                    if message["type"] == "message":
+                        yield f"data: {message['data']}\n\n"
+                        try:
+                            data = json.loads(message["data"])
+                            if data.get("event_type") in ("task.completed", "task.failed"):
+                                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                                break
+                        except Exception:
+                            pass
+                    if time.time() - last_ping > 15:
+                        yield f"data: {json.dumps({'type': 'ping'})}\n\n"
+                        last_ping = time.time()
+            except Exception as exc:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+
+        response = StreamingHttpResponse(_generate(), content_type="text/event-stream")
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        response["Access-Control-Allow-Origin"] = "*"
+        return response
+
+    def _stream_from_db(self, request, execution_id: str):
+        """Poll TraceStep from DB when Redis is unavailable."""
+        def _generate():
+            from apps.agent_intelligence.models import TraceStep
+            from apps.swarm_bridge.models import SwarmExecutionContext
+            import django.utils.timezone as tz
+
+            yield f"data: {json.dumps({'type': 'connected', 'execution_id': execution_id, 'mode': 'poll'})}\n\n"
+            last_id = None
+            last_ping = time.time()
+            polls = 0
+            MAX_POLLS = 600  # 60s at 100ms interval
+
+            while polls < MAX_POLLS:
+                qs = TraceStep.objects.filter(
+                    conversation__swarm_executions__id=execution_id
+                ).order_by("created_at")
+                if last_id:
+                    qs = qs.filter(id__gt=last_id)
+
+                for step in qs:
+                    event_data = {
+                        "event_type": "trace.step",
+                        "execution_id": execution_id,
+                        "agent_id": str(step.conversation.agent_id),
+                        "payload": {
+                            "node": step.node_name,
+                            "input": step.input_data,
+                            "output": step.output_data,
+                            "risk_score": step.risk_score,
+                            "is_loop": step.is_loop,
+                        },
+                        "duration_ms": step.duration_ms,
+                        "timestamp": step.created_at.isoformat(),
+                    }
+                    yield f"data: {json.dumps(event_data)}\n\n"
+                    last_id = step.id
+
+                # Check if context is done
+                ctx = SwarmExecutionContext.objects.filter(id=execution_id).first()
+                if ctx and ctx.status in ("completed", "failed", "denied"):
+                    yield f"data: {json.dumps({'type': 'done', 'status': ctx.status})}\n\n"
+                    break
+
+                if time.time() - last_ping > 15:
+                    yield f"data: {json.dumps({'type': 'ping'})}\n\n"
+                    last_ping = time.time()
+
+                time.sleep(0.1)
+                polls += 1
+
+        response = StreamingHttpResponse(_generate(), content_type="text/event-stream")
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        response["Access-Control-Allow-Origin"] = "*"
+        return response
+
+
+# ---------------------------------------------------------------------------
+# Execution replay (Phase 4 — enterprise audit)
+# ---------------------------------------------------------------------------
+
+class ExecutionReplayView(APIView):
+    """
+    GET /api/swarm/executions/<execution_id>/replay/
+
+    Returns every event recorded for an execution, ordered chronologically.
+    Used for compliance audit ("show me exactly what the agent did in this run")
+    and for debugging failed executions.
+
+    Response includes: TraceStep records + PolicyAuditLog entries for this execution.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, execution_id):
+        from apps.agent_intelligence.models import TraceStep
+        from apps.policy_engine.models import PolicyAuditLog
+
+        # Gather trace steps
+        steps = TraceStep.objects.filter(
+            conversation__swarm_executions__id=execution_id
+        ).order_by("created_at").values(
+            "id", "node_name", "input_data", "output_data",
+            "duration_ms", "risk_score", "is_loop", "created_at",
+        )
+
+        # Gather policy decisions
+        policy_logs = PolicyAuditLog.objects.filter(
+            agent__swarm_executions__id=execution_id
+        ).order_by("evaluated_at").values(
+            "id", "policy__name", "effect", "reason",
+            "risk_score", "evaluated_at",
+        )
+
+        # Interleave by timestamp
+        events = []
+        for step in steps:
+            events.append({
+                "source": "trace",
+                "timestamp": step["created_at"].isoformat() if step["created_at"] else None,
+                "node": step["node_name"],
+                "input": step["input_data"],
+                "output": step["output_data"],
+                "duration_ms": step["duration_ms"],
+                "risk_score": step["risk_score"],
+                "is_loop": step["is_loop"],
+            })
+
+        for log in policy_logs:
+            events.append({
+                "source": "policy",
+                "timestamp": log["evaluated_at"].isoformat() if log["evaluated_at"] else None,
+                "policy": log["policy__name"],
+                "effect": log["effect"],
+                "reason": log["reason"],
+                "risk_score": log["risk_score"],
+            })
+
+        events.sort(key=lambda e: e["timestamp"] or "")
+
+        ctx = SwarmExecutionContext.objects.filter(id=execution_id).first()
+        return Response({
+            "execution_id": str(execution_id),
+            "agent": ctx.swarm_agent_name if ctx else None,
+            "status": ctx.status if ctx else None,
+            "engine": ctx.engine if ctx else None,
+            "events": events,
+            "total_events": len(events),
         })

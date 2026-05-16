@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   RiArrowLeftLine, RiRocketLine, RiCheckLine, RiLoader4Line,
@@ -45,7 +45,6 @@ export default function SwarmRun() {
 
   const [lines, setLines] = useState([])
   const [phases, setPhases] = useState(PHASES.map(p => ({ ...p, state: 'pending', agents: [] })))
-  const [activePhase, setActivePhase] = useState(-1)
   const [done, setDone] = useState(false)
   const [exitCode, setExitCode] = useState(null)
   const [goal, setGoal] = useState('')
@@ -53,7 +52,8 @@ export default function SwarmRun() {
   const [elapsed, setElapsed] = useState(0)
   const [inputVal, setInputVal] = useState('')
   const [awaitingInput, setAwaitingInput] = useState(false)
-  const [view, setView] = useState('split') // 'split' | 'terminal' | 'nodes'
+  const [view, setView] = useState('split')
+  const [streamStatus, setStreamStatus] = useState('connecting') // connecting | live | error
 
   const termRef = useRef(null)
   const inputRef = useRef(null)
@@ -62,13 +62,11 @@ export default function SwarmRun() {
 
   // Elapsed timer
   useEffect(() => {
-    timerRef.current = setInterval(() => {
-      if (!done) setElapsed(e => e + 1)
-    }, 1000)
+    timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000)
     return () => clearInterval(timerRef.current)
-  }, [done])
+  }, [])
 
-  // Detect input-waiting state (stream stalls for 1.5s)
+  // Detect input-waiting when stream stalls
   useEffect(() => {
     if (done) return
     const check = setInterval(() => {
@@ -80,7 +78,7 @@ export default function SwarmRun() {
     return () => clearInterval(check)
   }, [done, lines])
 
-  // Load goal from status endpoint
+  // Load goal/model from status endpoint
   useEffect(() => {
     api.get(`/swarm/run/${runId}/`).then(d => {
       setGoal(d.goal || '')
@@ -88,52 +86,76 @@ export default function SwarmRun() {
     }).catch(() => {})
   }, [runId])
 
-  // SSE stream
+  // Poll backend for new lines every 500ms
   useEffect(() => {
-    const token = api.getAccess()
+    let cursor = 0
     let active = true
+    let timer = null
 
-    async function connect() {
-      try {
-        const res = await fetch(`/api/swarm/run/${runId}/stream/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (!res.ok || !active) return
-
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let buf = ''
-
-        while (active) {
-          const { done: d, value } = await reader.read()
-          if (d) break
-          buf += decoder.decode(value, { stream: true })
-          const parts = buf.split('\n')
-          buf = parts.pop()
-          for (const part of parts) {
-            if (!part.startsWith('data: ')) continue
-            try {
-              const evt = JSON.parse(part.slice(6))
-              if (evt.type === 'ping') continue
-              if (evt.type === 'done') {
-                setDone(true)
-                setExitCode(evt.exit_code)
-                setPhases(prev => prev.map((p, i) =>
-                  i === activePhase ? { ...p, state: 'done' } : p
-                ))
-              } else if (evt.type === 'line') {
-                lastLineTime.current = Date.now()
-                setAwaitingInput(false)
-                processLine(evt.content)
-              }
-            } catch {}
-          }
-        }
-      } catch {}
+    function addLine(content, extra = {}) {
+      setLines(prev => [...prev, { content, ts: Date.now(), ...extra }])
     }
 
-    connect()
-    return () => { active = false }
+    function handleLine(content) {
+      lastLineTime.current = Date.now()
+      setAwaitingInput(false)
+      addLine(content)
+
+      PHASE_TRIGGERS.forEach((re, i) => {
+        if (!re.test(content)) return
+        setPhases(prev => prev.map((p, pi) => {
+          if (pi < i)   return { ...p, state: 'done' }
+          if (pi === i) return { ...p, state: 'running' }
+          return p
+        }))
+      })
+
+      const dm = content.match(DISPATCH_RE)
+      if (dm) {
+        setPhases(prev => prev.map((p, pi) => {
+          if (pi !== 2) return p
+          if (p.agents.find(a => a.name === dm[1])) return p
+          return { ...p, agents: [...p.agents, { name: dm[1], state: 'running' }] }
+        }))
+      }
+
+      const done1 = content.match(AGENT_DONE_RE)
+      if (done1) {
+        const name = (done1[1] || done1[2] || '').toLowerCase()
+        setPhases(prev => prev.map((p, pi) => {
+          if (pi !== 2) return p
+          return { ...p, agents: p.agents.map(a => a.name.toLowerCase().includes(name) ? { ...a, state: 'done' } : a) }
+        }))
+      }
+    }
+
+    async function poll() {
+      if (!active) return
+      try {
+        const data = await api.get(`/swarm/run/${runId}/poll/?from=${cursor}`)
+        if (!active) return
+        setStreamStatus('live')
+        for (const evt of (data.lines || [])) {
+          cursor++
+          if (evt.type === 'line') handleLine(evt.content)
+        }
+        if (data.done) {
+          setDone(true)
+          setExitCode(data.exit_code)
+          setPhases(prev => prev.map(p => p.state === 'running' ? { ...p, state: 'done' } : p))
+          return
+        }
+      } catch (err) {
+        if (!active) return
+        setStreamStatus('error')
+        addLine(`[error] poll failed — ${err.message}`)
+        return
+      }
+      timer = setTimeout(poll, 500)
+    }
+
+    poll()
+    return () => { active = false; clearTimeout(timer) }
   }, [runId])
 
   // Scroll terminal
@@ -145,49 +167,6 @@ export default function SwarmRun() {
   useEffect(() => {
     if (awaitingInput) inputRef.current?.focus()
   }, [awaitingInput])
-
-  const processLine = useCallback((content) => {
-    setLines(prev => [...prev, { content, ts: Date.now() }])
-
-    // Phase detection
-    PHASE_TRIGGERS.forEach((re, i) => {
-      if (re.test(content)) {
-        setActivePhase(i)
-        setPhases(prev => prev.map((p, pi) => {
-          if (pi < i)  return { ...p, state: 'done' }
-          if (pi === i) return { ...p, state: 'running' }
-          return p
-        }))
-      }
-    })
-
-    // Agent dispatch detection
-    const dispatchMatch = content.match(DISPATCH_RE)
-    if (dispatchMatch) {
-      const agentName = dispatchMatch[1]
-      setPhases(prev => prev.map((p, pi) => {
-        if (pi !== 2) return p // only under Execute (phase index 2)
-        const already = p.agents.find(a => a.name === agentName)
-        if (already) return p
-        return { ...p, agents: [...p.agents, { name: agentName, state: 'running' }] }
-      }))
-    }
-
-    // Agent done detection
-    const doneMatch = content.match(AGENT_DONE_RE)
-    if (doneMatch) {
-      const agentName = (doneMatch[1] || doneMatch[2] || '').toLowerCase()
-      setPhases(prev => prev.map((p, pi) => {
-        if (pi !== 2) return p
-        return {
-          ...p,
-          agents: p.agents.map(a =>
-            a.name.toLowerCase().includes(agentName) ? { ...a, state: 'done' } : a
-          ),
-        }
-      }))
-    }
-  }, [activePhase])
 
   async function sendInput(e) {
     e.preventDefault()
@@ -302,8 +281,10 @@ export default function SwarmRun() {
             <div className="sr-term-bar">
               <span className="sr-term-dot red" /><span className="sr-term-dot amber" /><span className="sr-term-dot green" />
               <span className="sr-term-title">orchestrator · {goal}</span>
-              {!done && <span className="sr-term-live"><span className="dot dot-green dot-pulse" style={{ width: 6, height: 6 }} /> live</span>}
-              {done && <span className={`sr-term-exit ${exitCode === 0 ? 'ok' : 'fail'}`}>exit {exitCode}</span>}
+              {!done && streamStatus === 'connecting' && <span className="sr-term-live" style={{ opacity: 0.5 }}>connecting…</span>}
+              {!done && streamStatus === 'live'       && <span className="sr-term-live"><span className="dot dot-green dot-pulse" style={{ width: 6, height: 6 }} /> live</span>}
+              {!done && streamStatus === 'error'      && <span className="sr-term-exit fail">stream error</span>}
+              {done  && <span className={`sr-term-exit ${exitCode === 0 ? 'ok' : 'fail'}`}>exit {exitCode}</span>}
             </div>
 
             <div className="sr-terminal" ref={termRef}>

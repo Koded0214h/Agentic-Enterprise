@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   RiTimerFlashLine, RiStore2Line, RiBarChart2Line, RiRocketLine,
   RiArrowRightLine, RiCpuLine, RiShieldCheckLine, RiBrainLine,
-  RiDashboardLine, RiCheckLine, RiSparkling2Line,
+  RiDashboardLine, RiCheckLine, RiSparkling2Line, RiPriceTag3Line,
+  RiUserHeartLine, RiMailLine,
 } from 'react-icons/ri'
 import SpaceBackground from '../components/SpaceBackground'
 import GlassButton from '../components/ui/glass-button'
@@ -132,6 +133,75 @@ function useTypewriter(prompts, enabled) {
   return prompts[promptIdx].slice(0, charIdx)
 }
 
+function WaitlistSection() {
+  const [email, setEmail] = useState('')
+  const [status, setStatus] = useState('idle') // idle | loading | success | error
+
+  async function handleWaitlist(e) {
+    e.preventDefault()
+    if (!email.trim()) return
+    setStatus('loading')
+    try {
+      const res = await fetch('/api/auth/waitlist/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      if (res.ok) {
+        setStatus('success')
+        setEmail('')
+      } else {
+        setStatus('error')
+      }
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  return (
+    <section className="waitlist-section" id="waitlist">
+      <div className="section-inner">
+        <div className="waitlist-card reveal">
+          <RiMailLine size={28} className="waitlist-icon" aria-hidden="true" />
+          <p className="section-label">Early access</p>
+          <h2 className="waitlist-title">Get early access to AOS.</h2>
+          <p className="waitlist-desc">
+            Join the waitlist and be first to deploy your autonomous company.
+            No spam — just a heads-up when your slot opens.
+          </p>
+          {status === 'success' ? (
+            <div className="waitlist-success">
+              <RiCheckLine size={18} />
+              <span>You're on the list! We'll be in touch.</span>
+            </div>
+          ) : (
+            <form className="waitlist-form" onSubmit={handleWaitlist}>
+              <input
+                className="waitlist-input"
+                type="email"
+                placeholder="your@email.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
+              <button
+                type="submit"
+                className="btn btn-primary btn-sm waitlist-btn"
+                disabled={status === 'loading'}
+              >
+                {status === 'loading' ? 'Joining...' : 'Join waitlist'}
+              </button>
+            </form>
+          )}
+          {status === 'error' && (
+            <p className="waitlist-error">Something went wrong. Please try again.</p>
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 export default function Landing() {
   const [prompt, setPrompt] = useState('')
   const navigate = useNavigate()
@@ -165,8 +235,10 @@ export default function Landing() {
       <nav className="landing-nav">
         <span className="landing-logo">AOS</span>
         <div className="landing-nav-links">
+          <a href="#demo">Demo</a>
           <a href="#features">Features</a>
           <a href="#blueprints">Blueprints</a>
+          <a href="#pricing">Pricing</a>
           <a href="#faq">FAQ</a>
           <Link to="/login" className="btn btn-ghost btn-sm">Sign in</Link>
           <Link to="/signup" className="btn btn-primary btn-sm">Get started</Link>
@@ -246,6 +318,58 @@ export default function Landing() {
         </div>
 
         <div className="hero-scroll-cue" aria-hidden="true"><span /></div>
+      </section>
+
+      {/* ── Demo terminal ── */}
+      <section className="demo-section" id="demo">
+        <div className="section-inner">
+          <div className="reveal demo-header">
+            <p className="section-label">See it in action</p>
+            <h2 className="section-title demo-title">One prompt. A full company in motion.</h2>
+          </div>
+          <div className="terminal-card reveal">
+            <div className="terminal-bar">
+              <span className="terminal-dot terminal-dot-red" />
+              <span className="terminal-dot terminal-dot-yellow" />
+              <span className="terminal-dot terminal-dot-green" />
+              <span className="terminal-title">aos — zsh</span>
+            </div>
+            <div className="terminal-body">
+              <p className="terminal-line">
+                <span className="terminal-prompt">$</span>
+                <span className="terminal-cmd"> aos run <span className="terminal-string">"Launch SaaS MVP for construction project management"</span></span>
+              </p>
+              <p className="terminal-line terminal-output">
+                <span className="terminal-tag">[AOS]</span> Analyzing goal and decomposing into task DAG...
+              </p>
+              <p className="terminal-line terminal-output">
+                <span className="terminal-tag">[AOS]</span> Spawning 12 agents across product, engineering, and growth...
+              </p>
+              <p className="terminal-line terminal-output">
+                <span className="terminal-tag">[PRD]</span> Generating product requirements document — construction PM vertical
+              </p>
+              <p className="terminal-line terminal-output">
+                <span className="terminal-tag">[ARCH]</span> Planning system architecture: Next.js + Supabase + Stripe
+              </p>
+              <p className="terminal-line terminal-output">
+                <span className="terminal-tag">[ENG]</span>  Committing initial scaffold to GitHub... <span className="terminal-success">done</span>
+              </p>
+              <p className="terminal-line terminal-output">
+                <span className="terminal-tag">[GTM]</span>  Drafting landing page copy, ICP, and outreach sequences...
+              </p>
+              <p className="terminal-line terminal-output">
+                <span className="terminal-tag">[OPS]</span>  Configuring CI/CD pipeline and staging environment...
+              </p>
+              <p className="terminal-line terminal-output terminal-dim">
+                12 agents running in parallel — awaiting human review on billing integration
+              </p>
+              <p className="terminal-line">
+                <span className="terminal-prompt terminal-green">$</span>
+                <span className="terminal-cursor-block" aria-hidden="true" />
+              </p>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* ── Features bento ── */}
@@ -353,6 +477,108 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── Pricing ── */}
+      <section className="pricing-section" id="pricing">
+        <div className="section-inner">
+          <div className="reveal pricing-header">
+            <p className="section-label">Pricing</p>
+            <h2 className="section-title pricing-title">Transparent pricing. No surprises.</h2>
+            <p className="pricing-desc">Start free, scale as your swarm grows. Cancel anytime.</p>
+          </div>
+          <div className="pricing-grid">
+            {/* Starter */}
+            <div className="pricing-card reveal" style={{ transitionDelay: '0ms' }}>
+              <div className="pricing-card-header">
+                <RiPriceTag3Line size={20} className="pricing-icon" />
+                <span className="pricing-tier">Starter</span>
+              </div>
+              <div className="pricing-price">
+                <span className="pricing-amount">$49</span>
+                <span className="pricing-period">/mo</span>
+              </div>
+              <p className="pricing-tagline">For founders validating their first idea.</p>
+              <ul className="pricing-features">
+                <li><RiCheckLine size={14} /> 50,000 tokens / month</li>
+                <li><RiCheckLine size={14} /> Up to 10 concurrent agents</li>
+                <li><RiCheckLine size={14} /> 2 active swarm blueprints</li>
+                <li><RiCheckLine size={14} /> Community support</li>
+                <li><RiCheckLine size={14} /> Full audit trail</li>
+              </ul>
+              <Link to="/signup" className="pricing-cta btn btn-ghost btn-sm">Get started</Link>
+            </div>
+
+            {/* Growth */}
+            <div className="pricing-card pricing-card-featured reveal" style={{ transitionDelay: '80ms' }}>
+              <div className="pricing-card-popular">Most popular</div>
+              <div className="pricing-card-header">
+                <RiRocketLine size={20} className="pricing-icon" />
+                <span className="pricing-tier">Growth</span>
+              </div>
+              <div className="pricing-price">
+                <span className="pricing-amount">$149</span>
+                <span className="pricing-period">/mo</span>
+              </div>
+              <p className="pricing-tagline">For operators running a real business.</p>
+              <ul className="pricing-features">
+                <li><RiCheckLine size={14} /> 500,000 tokens / month</li>
+                <li><RiCheckLine size={14} /> Up to 50 concurrent agents</li>
+                <li><RiCheckLine size={14} /> Unlimited blueprints</li>
+                <li><RiCheckLine size={14} /> Priority support</li>
+                <li><RiCheckLine size={14} /> Custom blueprint templates</li>
+                <li><RiCheckLine size={14} /> Compliance policy packs</li>
+              </ul>
+              <Link to="/signup" className="pricing-cta btn btn-primary btn-sm">Start free trial</Link>
+            </div>
+
+            {/* Enterprise */}
+            <div className="pricing-card reveal" style={{ transitionDelay: '160ms' }}>
+              <div className="pricing-card-header">
+                <RiShieldCheckLine size={20} className="pricing-icon" />
+                <span className="pricing-tier">Enterprise</span>
+              </div>
+              <div className="pricing-price">
+                <span className="pricing-amount pricing-custom">Custom</span>
+              </div>
+              <p className="pricing-tagline">For teams that need full control and compliance.</p>
+              <ul className="pricing-features">
+                <li><RiCheckLine size={14} /> Unlimited tokens</li>
+                <li><RiCheckLine size={14} /> All 245 agent types</li>
+                <li><RiCheckLine size={14} /> Dedicated account support</li>
+                <li><RiCheckLine size={14} /> HIPAA, SOX, PCI-DSS, GDPR packs</li>
+                <li><RiCheckLine size={14} /> SLA guarantee</li>
+                <li><RiCheckLine size={14} /> Custom integrations &amp; API access</li>
+              </ul>
+              <a href="#waitlist" className="pricing-cta btn btn-ghost btn-sm">Contact us</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Waitlist ── */}
+      <WaitlistSection />
+
+      {/* ── Founder story ── */}
+      <section className="founder-section">
+        <div className="section-inner">
+          <div className="founder-card reveal">
+            <div className="founder-icon-wrap" aria-hidden="true">
+              <RiUserHeartLine size={28} />
+            </div>
+            <p className="founder-label section-label">Our story</p>
+            <h2 className="founder-title">Built by a founder, for founders.</h2>
+            <p className="founder-body">
+              AOS started from a simple frustration: building a company alone is hard.
+              Hiring is expensive, coordination is slow, and the gap between a great idea
+              and real execution has always been people. I built AOS because I believe
+              that operational leverage — the kind that used to cost $500k in salaries —
+              should be accessible to any solo founder with a clear goal. Every feature
+              in AOS exists to eliminate the bottleneck between idea and outcome.
+              You bring the vision. The swarm handles the rest.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* ── CTA ── */}
       <section className="cta-section">
         <div className="cta-glow" aria-hidden="true" />
@@ -381,6 +607,10 @@ export default function Landing() {
       <footer className="landing-footer">
         <span className="landing-logo">AOS</span>
         <span>© 2026 Autonomous Operating System</span>
+        <div className="footer-links">
+          <Link to="/terms">Terms of Service</Link>
+          <Link to="/privacy">Privacy Policy</Link>
+        </div>
       </footer>
     </div>
   )

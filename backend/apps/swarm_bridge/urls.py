@@ -8,8 +8,14 @@ from .views import (
     SwarmExecutionContextDetailView,
     SwarmRunView,
     SwarmRunStreamView,
+    SwarmRunPollView,
     SwarmRunInputView,
     SwarmRunStatusView,
+    SwarmRunCancelView,
+    ExecutionEventStreamView,
+    ExecutionReplayView,
+    ExecutionCancelView,
+    CouncilReviewView,
 )
 
 urlpatterns = [
@@ -35,9 +41,35 @@ urlpatterns = [
         name="swarm-execution-detail",
     ),
 
+    # Native execution — real-time SSE event stream (Phase 3)
+    path(
+        "executions/<uuid:execution_id>/stream/",
+        ExecutionEventStreamView.as_view(),
+        name="swarm-execution-stream",
+    ),
+
+    # Native execution — full event replay for audit (Phase 4)
+    path(
+        "executions/<uuid:execution_id>/replay/",
+        ExecutionReplayView.as_view(),
+        name="swarm-execution-replay",
+    ),
+
+    # Native execution — cancel signal
+    path(
+        "executions/<uuid:execution_id>/cancel/",
+        ExecutionCancelView.as_view(),
+        name="swarm-execution-cancel",
+    ),
+
+    # Council multi-agent review
+    path("council/review/", CouncilReviewView.as_view(), name="swarm-council-review"),
+
     # Swarm run lifecycle
-    path("run/",                          SwarmRunView.as_view(),       name="swarm-run"),
-    path("run/<str:run_id>/",             SwarmRunStatusView.as_view(), name="swarm-run-status"),
-    path("run/<str:run_id>/stream/",      SwarmRunStreamView.as_view(), name="swarm-run-stream"),
-    path("run/<str:run_id>/input/",       SwarmRunInputView.as_view(),  name="swarm-run-input"),
+    path("run/",                          SwarmRunView.as_view(),        name="swarm-run"),
+    path("run/<str:run_id>/",             SwarmRunStatusView.as_view(),  name="swarm-run-status"),
+    path("run/<str:run_id>/stream/",      SwarmRunStreamView.as_view(),  name="swarm-run-stream"),
+    path("run/<str:run_id>/poll/",        SwarmRunPollView.as_view(),    name="swarm-run-poll"),
+    path("run/<str:run_id>/input/",       SwarmRunInputView.as_view(),   name="swarm-run-input"),
+    path("run/<str:run_id>/cancel/",      SwarmRunCancelView.as_view(),  name="swarm-run-cancel"),
 ]
