@@ -780,6 +780,82 @@ class ExecutionCancelView(APIView):
         return Response({"ok": True, "execution_id": str(execution_id), "detail": "Cancellation signal sent"})
 
 
+class WorkflowTemplateLaunchView(APIView):
+    """
+    POST /api/swarm/workflows/templates/<template_id>/launch/
+    Body: { "idea": "..." }
+
+    Builds the template DAG with the user-supplied idea and runs it.
+    Returns the orchestration result with per-node status.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, template_id):
+        idea = request.data.get("idea", "").strip()
+        if not idea:
+            return Response({"detail": "idea is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        execution_id = str(uuid.uuid4())
+
+        try:
+            import asyncio
+            import sys as _sys
+            _sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "agent-swarm"))
+            from runtime.templates import get_template
+            from runtime import run_graph
+
+            template = get_template(template_id)
+            if not template:
+                return Response({"detail": f"Unknown template: {template_id}"}, status=status.HTTP_404_NOT_FOUND)
+
+            graph = template["build"](idea)
+            graph.id = execution_id
+
+            result = asyncio.run(run_graph(graph, execution_id=execution_id))
+            return Response({
+                "execution_id": execution_id,
+                "template_id": template_id,
+                "idea": idea,
+                **result,
+            })
+        except ImportError:
+            return Response(
+                {"detail": "Swarm runtime not available in this environment."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except Exception as exc:
+            import traceback
+            return Response(
+                {"detail": str(exc), "trace": traceback.format_exc()[-2000:]},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class WorkflowTemplatesListView(APIView):
+    """GET /api/swarm/workflows/templates/ — list available templates."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "agent-swarm"))
+            from runtime.templates import TEMPLATES
+            return Response({
+                "templates": [
+                    {
+                        "id": tid,
+                        "name": t["name"],
+                        "description": t["description"],
+                        "agents": t["agents"],
+                        "estimated_minutes": t["estimated_minutes"],
+                    }
+                    for tid, t in TEMPLATES.items()
+                ]
+            })
+        except ImportError:
+            return Response({"templates": []})
+
+
 class WorkflowGraphRunView(APIView):
     """
     POST /api/swarm/workflows/graph/

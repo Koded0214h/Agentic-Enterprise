@@ -1,19 +1,22 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   RiRocketLine, RiFileTextLine, RiMegaphoneLine, RiSearchLine,
-  RiSendPlaneLine, RiServerLine,
+  RiSendPlaneLine, RiServerLine, RiCloseLine, RiPlayLine,
 } from 'react-icons/ri'
+import { api } from '../../api/client'
 import './WorkflowTemplates.css'
 
 const TEMPLATES = [
   {
-    id: 'saas-mvp',
-    name: 'Launch SaaS MVP',
-    desc: 'Full product + engineering + marketing launch',
-    agents: 12,
+    id: 'saas-mvp-72h',
+    name: 'Launch SaaS MVP in 72h',
+    desc: '5 coordinated agents — planner → backend, frontend, devops, marketing in parallel',
+    agents: 5,
     Icon: RiRocketLine,
     color: 'var(--accent)',
     tag: 'popular',
+    runnable: true,
   },
   {
     id: 'prd-gen',
@@ -70,9 +73,39 @@ const TAG_COLORS = {
 
 export default function WorkflowTemplates() {
   const navigate = useNavigate()
+  const [launchTpl, setLaunchTpl] = useState(null)   // template object when modal open
+  const [idea, setIdea] = useState('')
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
 
   function useTemplate(t) {
-    navigate(`/app/swarm?prompt=${encodeURIComponent(t.name)}`)
+    if (t.runnable) {
+      setLaunchTpl(t)
+      setIdea('')
+      setResult(null)
+      setError('')
+    } else {
+      navigate(`/app/swarm?prompt=${encodeURIComponent(t.name)}`)
+    }
+  }
+
+  async function launch() {
+    if (!idea.trim() || !launchTpl) return
+    setRunning(true)
+    setError('')
+    setResult(null)
+    try {
+      const res = await api.post(
+        `/swarm/workflows/templates/${launchTpl.id}/launch/`,
+        { idea: idea.trim() }
+      )
+      setResult(res)
+    } catch (e) {
+      setError(e?.data?.detail || e?.message || 'Workflow failed')
+    } finally {
+      setRunning(false)
+    }
   }
 
   return (
@@ -137,6 +170,99 @@ export default function WorkflowTemplates() {
           <RiRocketLine size={14} /> Run custom swarm
         </button>
       </div>
+
+      {launchTpl && (
+        <div className="tpl-modal-backdrop" onClick={() => !running && setLaunchTpl(null)}>
+          <div className="tpl-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="tpl-modal-head">
+              <div>
+                <div className="tpl-modal-title">{launchTpl.name}</div>
+                <div className="tpl-modal-sub">{launchTpl.desc}</div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => !running && setLaunchTpl(null)}>
+                <RiCloseLine size={16} />
+              </button>
+            </div>
+
+            {!result && !error && (
+              <>
+                <label className="tpl-modal-label">Describe your SaaS idea in one sentence</label>
+                <textarea
+                  className="tpl-modal-input"
+                  value={idea}
+                  onChange={(e) => setIdea(e.target.value)}
+                  placeholder="e.g. A tool that helps freelance designers send invoices and track payments without spreadsheets."
+                  rows={3}
+                  disabled={running}
+                />
+                <div className="tpl-modal-actions">
+                  <button
+                    className="btn btn-primary"
+                    onClick={launch}
+                    disabled={running || !idea.trim()}
+                  >
+                    {running ? (
+                      <>Running 5 agents…</>
+                    ) : (
+                      <><RiPlayLine size={14} /> Launch swarm</>
+                    )}
+                  </button>
+                </div>
+                {running && (
+                  <p className="tpl-modal-hint">
+                    This takes ~8 minutes. The planner runs first, then 4 specialists run in parallel.
+                    You'll see live progress on the Observe page once it starts.
+                  </p>
+                )}
+              </>
+            )}
+
+            {error && (
+              <div className="tpl-modal-error">
+                <strong>Failed:</strong> {error}
+                <button className="btn btn-ghost btn-sm" onClick={() => setError('')}>Try again</button>
+              </div>
+            )}
+
+            {result && (
+              <div className="tpl-modal-result">
+                <div className="tpl-modal-result-header">
+                  <span className={`badge ${result.success ? 'badge-green' : 'badge-amber'}`}>
+                    {result.success ? '✓ Complete' : 'Partial — check failed nodes'}
+                  </span>
+                  <span className="tpl-modal-mono">{result.execution_id?.slice(0, 8)}</span>
+                </div>
+                <ul className="tpl-modal-nodes">
+                  {result.graph?.nodes?.map((n) => (
+                    <li key={n.id} className={`tpl-modal-node status-${n.status}`}>
+                      <span className="tpl-modal-node-id">{n.id}</span>
+                      <span className="tpl-modal-node-agent">{n.agent_name}</span>
+                      <span className={`badge badge-${
+                        n.status === 'completed' ? 'green' :
+                        n.status === 'failed' ? 'red' :
+                        n.status === 'cancelled' || n.status === 'skipped' ? 'amber' :
+                        'gray'
+                      }`}>
+                        {n.status}
+                      </span>
+                      <span className="tpl-modal-mono">{n.duration_ms ? `${(n.duration_ms / 1000).toFixed(1)}s` : ''}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="tpl-modal-actions">
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => navigate(`/app/observe?execution=${result.execution_id}`)}
+                  >
+                    Open in Observe →
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => setLaunchTpl(null)}>Close</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

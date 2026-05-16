@@ -1,22 +1,22 @@
 """
-AOS Notification Service
+AOS Notification Service — Gmail SMTP default
 
-A single send() function abstracts whichever email transport is configured.
-Supports (in priority order):
-  1. Resend (preferred — best DX, free 100/day)        — env: RESEND_API_KEY
-  2. Postmark (transactional)                          — env: POSTMARK_SERVER_TOKEN
-  3. SendGrid                                          — env: SENDGRID_API_KEY
-  4. SMTP fallback (any host)                          — env: SMTP_HOST + creds
-  5. Console (dev fallback)                            — no env, just prints
+Sends transactional email via Gmail SMTP. Two env vars are all you need:
 
-Also wires up:
-  - Discord webhooks for admin notifications  — env: DISCORD_WEBHOOK_URL
-  - In-app notifications (DB-backed)          — always on
+    GMAIL_USER=you@gmail.com
+    GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx    # NOT your real password — see below
 
-Usage:
-    from apps.agent_gateway.notifications import send_email, notify_admin
-    send_email(to="user@x.com", subject="...", body="...", template="approval")
-    notify_admin("New beta signup", payload={"email": "..."})
+Where to get the App Password:
+  1. https://myaccount.google.com/security  → enable 2-Step Verification
+  2. https://myaccount.google.com/apppasswords
+  3. Generate a password for "Mail" / "AOS backend" → copy the 16-char string
+     (spaces are fine; keep or strip them)
+
+If GMAIL_APP_PASSWORD is empty, emails fall back to console logging so flows
+still work in dev without any setup.
+
+(Optional override: set SMTP_HOST/PORT/USER/PASSWORD to use a different provider.
+ Discord webhook for admin pings stays at DISCORD_WEBHOOK_URL.)
 """
 from __future__ import annotations
 
@@ -33,123 +33,18 @@ EmailTemplate = Literal[
 ]
 
 
-def _resend_send(to: str, subject: str, body: str, from_addr: str) -> bool:
-    api_key = os.environ.get("RESEND_API_KEY")
-    if not api_key:
-        return False
-    try:
-        import urllib.request
-        req = urllib.request.Request(
-            "https://api.resend.com/emails",
-            data=json.dumps({
-                "from": from_addr,
-                "to": [to],
-                "subject": subject,
-                "html": body,
-            }).encode(),
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return resp.status < 400
-    except Exception as exc:
-        print(f"[notifications] Resend error: {exc}")
-        return False
-
-
-def _postmark_send(to: str, subject: str, body: str, from_addr: str) -> bool:
-    token = os.environ.get("POSTMARK_SERVER_TOKEN")
-    if not token:
-        return False
-    try:
-        import urllib.request
-        req = urllib.request.Request(
-            "https://api.postmarkapp.com/email",
-            data=json.dumps({
-                "From": from_addr,
-                "To": to,
-                "Subject": subject,
-                "HtmlBody": body,
-                "MessageStream": "outbound",
-            }).encode(),
-            headers={
-                "X-Postmark-Server-Token": token,
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return resp.status < 400
-    except Exception as exc:
-        print(f"[notifications] Postmark error: {exc}")
-        return False
-
-
-def _sendgrid_send(to: str, subject: str, body: str, from_addr: str) -> bool:
-    api_key = os.environ.get("SENDGRID_API_KEY")
-    if not api_key:
-        return False
-    try:
-        import urllib.request
-        req = urllib.request.Request(
-            "https://api.sendgrid.com/v3/mail/send",
-            data=json.dumps({
-                "personalizations": [{"to": [{"email": to}]}],
-                "from": {"email": from_addr},
-                "subject": subject,
-                "content": [{"type": "text/html", "value": body}],
-            }).encode(),
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return resp.status < 400
-    except Exception as exc:
-        print(f"[notifications] SendGrid error: {exc}")
-        return False
-
-
-def _smtp_send(to: str, subject: str, body: str, from_addr: str) -> bool:
-    host = os.environ.get("SMTP_HOST")
-    if not host:
-        return False
-    port = int(os.environ.get("SMTP_PORT", 587))
-    user = os.environ.get("SMTP_USER", "")
-    password = os.environ.get("SMTP_PASSWORD", "")
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = from_addr
-        msg["To"] = to
-        msg.attach(MIMEText(body, "html"))
-        with smtplib.SMTP(host, port, timeout=15) as server:
-            server.starttls()
-            if user:
-                server.login(user, password)
-            server.sendmail(from_addr, [to], msg.as_string())
-        return True
-    except Exception as exc:
-        print(f"[notifications] SMTP error: {exc}")
-        return False
-
-
 # Minimal HTML templates — extend or use a real template engine in production
 _TEMPLATES: dict[str, tuple[str, str]] = {
     "verify_email": (
         "Verify your AOS email",
-        "<p>Hi,</p><p>Confirm your email by entering this token in AOS: <code>{token}</code></p>"
+        "<p>Hi,</p><p>Confirm your email by entering this token in AOS: "
+        "<code style='font-size:18px;background:#f4f4f5;padding:6px 10px;border-radius:6px'>{token}</code></p>"
         "<p>It expires in 24 hours.</p>",
     ),
     "password_reset": (
         "Reset your AOS password",
-        "<p>Use this code to reset your password: <code>{token}</code></p>"
+        "<p>Use this code to reset your password: "
+        "<code style='font-size:18px;background:#f4f4f5;padding:6px 10px;border-radius:6px'>{token}</code></p>"
         "<p>It expires in 1 hour.</p>",
     ),
     "approval_request": (
@@ -174,6 +69,64 @@ _TEMPLATES: dict[str, tuple[str, str]] = {
 }
 
 
+def _gmail_smtp_send(to: str, subject: str, body: str, from_addr: str) -> bool:
+    """
+    Send via Gmail SMTP.
+    Uses GMAIL_USER + GMAIL_APP_PASSWORD (or falls back to APP_PASSWORD,
+    matching the legacy variable name some setups use).
+    """
+    user = os.environ.get("GMAIL_USER") or os.environ.get("EMAIL_USER")
+    app_password = (
+        os.environ.get("GMAIL_APP_PASSWORD")
+        or os.environ.get("APP_PASSWORD")
+        or ""
+    ).replace(" ", "")  # Google shows the password with spaces; strip them.
+
+    if not app_password:
+        return False
+
+    sender = user or from_addr
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = sender
+        msg["To"] = to
+        msg.attach(MIMEText(body, "html"))
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+            server.starttls()
+            server.login(sender, app_password)
+            server.sendmail(sender, [to], msg.as_string())
+        return True
+    except Exception as exc:
+        print(f"[notifications] Gmail SMTP error: {exc}")
+        return False
+
+
+def _custom_smtp_send(to: str, subject: str, body: str, from_addr: str) -> bool:
+    """Generic SMTP override (Mailgun, AWS SES, Postmark SMTP, etc.)."""
+    host = os.environ.get("SMTP_HOST")
+    if not host:
+        return False
+    port = int(os.environ.get("SMTP_PORT", 587))
+    user = os.environ.get("SMTP_USER", "")
+    password = os.environ.get("SMTP_PASSWORD", "")
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = from_addr
+        msg["To"] = to
+        msg.attach(MIMEText(body, "html"))
+        with smtplib.SMTP(host, port, timeout=15) as server:
+            server.starttls()
+            if user:
+                server.login(user, password)
+            server.sendmail(from_addr, [to], msg.as_string())
+        return True
+    except Exception as exc:
+        print(f"[notifications] SMTP error: {exc}")
+        return False
+
+
 def send_email(
     *,
     to: str,
@@ -184,8 +137,8 @@ def send_email(
     from_addr: str | None = None,
 ) -> bool:
     """
-    Send an email using whichever transport is configured.
-    Returns True if any provider accepted the message.
+    Send an email. Tries Gmail SMTP first, then any configured SMTP override,
+    then falls back to console logging so dev flows still work.
     """
     if template != "generic" and template in _TEMPLATES:
         tpl_subject, tpl_body = _TEMPLATES[template]
@@ -197,14 +150,19 @@ def send_email(
             except (KeyError, IndexError):
                 pass
 
-    sender = from_addr or os.environ.get("EMAIL_FROM", "no-reply@aos-swarm.com")
+    sender = (
+        from_addr
+        or os.environ.get("EMAIL_FROM")
+        or os.environ.get("GMAIL_USER")
+        or os.environ.get("EMAIL_USER")
+        or "no-reply@aos-swarm.com"
+    )
 
-    # Try transports in priority order
-    for transport in (_resend_send, _postmark_send, _sendgrid_send, _smtp_send):
-        if transport(to, subject, body, sender):
-            return True
+    if _gmail_smtp_send(to, subject, body, sender):
+        return True
+    if _custom_smtp_send(to, subject, body, sender):
+        return True
 
-    # Console fallback so flows still work in dev
     print(
         f"\n[notifications] No email transport configured. Logging instead:\n"
         f"  TO:      {to}\n"
@@ -217,8 +175,8 @@ def send_email(
 
 def notify_admin(title: str, payload: dict | None = None) -> bool:
     """
-    Send an admin notification via Discord webhook (if configured) and console.
-    Useful for: new signups, critical failures, beta feedback, etc.
+    Admin notification via Discord webhook (if DISCORD_WEBHOOK_URL set),
+    else console log.
     """
     webhook = os.environ.get("DISCORD_WEBHOOK_URL")
     body = f"**{title}**"

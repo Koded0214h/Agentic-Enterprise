@@ -17,6 +17,8 @@ from .views import (
     ExecutionCancelView,
     CouncilReviewView,
     WorkflowGraphRunView,
+    WorkflowTemplateLaunchView,
+    WorkflowTemplatesListView,
 )
 
 urlpatterns = [
@@ -68,6 +70,14 @@ urlpatterns = [
 
     # Multi-agent DAG / workflow graph execution
     path("workflows/graph/", WorkflowGraphRunView.as_view(), name="swarm-workflow-graph"),
+
+    # Workflow templates (one-click multi-agent demos)
+    path("workflows/templates/", WorkflowTemplatesListView.as_view(), name="swarm-workflow-templates"),
+    path(
+        "workflows/templates/<str:template_id>/launch/",
+        WorkflowTemplateLaunchView.as_view(),
+        name="swarm-workflow-template-launch",
+    ),
 
     # Swarm run lifecycle
     path("run/",                          SwarmRunView.as_view(),        name="swarm-run"),

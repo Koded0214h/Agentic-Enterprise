@@ -377,7 +377,7 @@ export default function Landing() {
         <div className="section-inner">
           <div className="reveal">
             <p className="section-label">Platform</p>
-            <h2 className="section-title">Built for operators, not hobbyists</h2>
+            <h2 className="section-title">Built for lazy founders, like us</h2>
           </div>
 
           <div className="features-bento">
