@@ -233,6 +233,34 @@ function LiveMonitor() {
 
   useEffect(() => () => esRef.current?.close(), [])
 
+  // If we landed here with ?execution=<id>, auto-open replay for that run.
+  // This is what the "Open in Observe →" button on the templates modal sends.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const execId = params.get('execution')
+    if (execId && execId !== selectedExec) {
+      setSelectedExec(execId)
+      setLiveEvents([])
+      setStreaming(false)
+      // Try the replay endpoint first (works for completed runs);
+      // fall back to live stream if replay 404s (still-running run).
+      observe.executionReplay(execId)
+        .then((data) => {
+          const events = Array.isArray(data?.events) ? data.events : (Array.isArray(data) ? data : [])
+          setLiveEvents(events.slice(-200))
+          requestAnimationFrame(() => {
+            if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight
+          })
+        })
+        .catch(() => {
+          // Replay not available — fall back to live SSE stream
+          openStream(execId)
+        })
+    }
+    // We only want this on initial mount / when the URL changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: selectedExec ? '1fr 1fr' : '1fr', gap: 16 }}>
       {/* Agent / task list */}

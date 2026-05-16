@@ -92,3 +92,61 @@
   word-break: break-word;
   white-space: pre-wrap;
 }
+
+.tpl-modal-totals {
+  display: flex; gap: 18px; flex-wrap: wrap;
+  padding: 10px 12px; margin-bottom: 12px;
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.tpl-modal-totals b { color: var(--text-h); font-family: var(--mono); }
+
+.tpl-modal-node-row {
+  width: 100%;
+  background: transparent; border: none; padding: 0;
+  text-align: left; cursor: pointer; color: inherit;
+}
+.tpl-modal-node-row:disabled { cursor: default; }
+.tpl-modal-node-caret {
+  color: var(--text-2);
+  transition: transform 150ms ease;
+}
+
+.tpl-modal-node-row {
+  display: grid;
+  grid-template-columns: 16px 60px 1fr 90px 60px;
+  align-items: center; gap: 10px;
+}
+
+.tpl-modal-node-output-wrap {
+  margin-top: 8px;
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.02);
+  overflow: hidden;
+}
+.tpl-modal-node-output-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 10px;
+  background: var(--bg-3);
+  border-bottom: 1px solid var(--border-2);
+  font-size: 11px;
+}
+.tpl-modal-node-output {
+  margin: 0;
+  padding: 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-h);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.tpl-modal {
+  max-width: 720px;   /* wider when outputs are shown */
+}

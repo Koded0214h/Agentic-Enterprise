@@ -56,6 +56,15 @@ class TaskNode:
         return 0
 
     def to_dict(self) -> dict:
+        # Include the agent's actual output (truncated) so the UI can show
+        # what each node produced, not just status badges.
+        output_text = ""
+        tokens_in = 0
+        tokens_out = 0
+        if isinstance(self.result, dict):
+            output_text = (self.result.get("output") or "")[:8000]
+            tokens_in = self.result.get("tokens_input") or 0
+            tokens_out = self.result.get("tokens_output") or 0
         return {
             "id": self.id,
             "agent_name": self.agent_name,
@@ -64,6 +73,9 @@ class TaskNode:
             "status": self.status,
             "duration_ms": self.duration_ms,
             "error": self.error,
+            "output": output_text,
+            "tokens_input": tokens_in,
+            "tokens_output": tokens_out,
         }
 
 

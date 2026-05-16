@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   RiRocketLine, RiFileTextLine, RiMegaphoneLine, RiSearchLine,
   RiSendPlaneLine, RiServerLine, RiCloseLine, RiPlayLine,
+  RiArrowDownSLine, RiFileCopyLine,
 } from 'react-icons/ri'
 import { api } from '../../api/client'
 import './WorkflowTemplates.css'
@@ -225,51 +226,115 @@ export default function WorkflowTemplates() {
             )}
 
             {result && (
-              <div className="tpl-modal-result">
-                <div className="tpl-modal-result-header">
-                  <span className={`badge ${result.success ? 'badge-green' : 'badge-amber'}`}>
-                    {result.success ? '✓ Complete' : 'Partial — check failed nodes'}
-                  </span>
-                  <span className="tpl-modal-mono">{result.execution_id?.slice(0, 8)}</span>
-                </div>
-                <ul className="tpl-modal-nodes">
-                  {result.graph?.nodes?.map((n) => (
-                    <li key={n.id} className={`tpl-modal-node status-${n.status}`}>
-                      <div className="tpl-modal-node-row">
-                        <span className="tpl-modal-node-id">{n.id}</span>
-                        <span className="tpl-modal-node-agent">{n.agent_name}</span>
-                        <span className={`badge badge-${
-                          n.status === 'completed' ? 'green' :
-                          n.status === 'failed' ? 'red' :
-                          n.status === 'cancelled' || n.status === 'skipped' ? 'amber' :
-                          'gray'
-                        }`}>
-                          {n.status}
-                        </span>
-                        <span className="tpl-modal-mono">{n.duration_ms ? `${(n.duration_ms / 1000).toFixed(1)}s` : ''}</span>
-                      </div>
-                      {n.error && (
-                        <div className="tpl-modal-node-error" title={n.error}>
-                          {n.error.length > 200 ? n.error.slice(0, 200) + '…' : n.error}
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                <div className="tpl-modal-actions">
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => navigate(`/app/observe?execution=${result.execution_id}`)}
-                  >
-                    Open in Observe →
-                  </button>
-                  <button className="btn btn-ghost" onClick={() => setLaunchTpl(null)}>Close</button>
-                </div>
-              </div>
+              <ResultPanel
+                result={result}
+                onClose={() => setLaunchTpl(null)}
+                onOpenObserve={() => navigate(`/app/observe?execution=${result.execution_id}`)}
+              />
             )}
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+
+function ResultPanel({ result, onClose, onOpenObserve }) {
+  const [openNode, setOpenNode] = useState(
+    // Auto-expand the first completed node so the user sees output immediately
+    result.graph?.nodes?.find((n) => n.status === 'completed' && n.output)?.id || null
+  )
+
+  const totalTokensIn = result.graph?.nodes?.reduce((s, n) => s + (n.tokens_input || 0), 0) || 0
+  const totalTokensOut = result.graph?.nodes?.reduce((s, n) => s + (n.tokens_output || 0), 0) || 0
+  const totalDuration = result.graph?.nodes?.reduce((s, n) => s + (n.duration_ms || 0), 0) || 0
+
+  async function copyOutput(text) {
+    try { await navigator.clipboard.writeText(text) } catch { /* noop */ }
+  }
+
+  function badgeColor(status) {
+    if (status === 'completed') return 'green'
+    if (status === 'failed') return 'red'
+    if (status === 'cancelled' || status === 'skipped') return 'amber'
+    return 'gray'
+  }
+
+  return (
+    <div className="tpl-modal-result">
+      <div className="tpl-modal-result-header">
+        <span className={`badge badge-${result.success ? 'green' : 'amber'}`}>
+          {result.success ? '✓ Complete' : 'Partial — see failed nodes'}
+        </span>
+        <span className="tpl-modal-mono">{result.execution_id?.slice(0, 8)}</span>
+      </div>
+
+      <div className="tpl-modal-totals">
+        <span><b>{(totalDuration / 1000).toFixed(1)}s</b> total</span>
+        <span><b>{totalTokensIn.toLocaleString()}</b> input tokens</span>
+        <span><b>{totalTokensOut.toLocaleString()}</b> output tokens</span>
+      </div>
+
+      <ul className="tpl-modal-nodes">
+        {result.graph?.nodes?.map((n) => {
+          const isOpen = openNode === n.id
+          const hasOutput = !!(n.output || n.error)
+          return (
+            <li key={n.id} className={`tpl-modal-node status-${n.status}`}>
+              <button
+                type="button"
+                className="tpl-modal-node-row"
+                onClick={() => setOpenNode(isOpen ? null : n.id)}
+                disabled={!hasOutput}
+              >
+                <RiArrowDownSLine
+                  size={14}
+                  className="tpl-modal-node-caret"
+                  style={{
+                    transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+                    opacity: hasOutput ? 1 : 0.2,
+                  }}
+                />
+                <span className="tpl-modal-node-id">{n.id}</span>
+                <span className="tpl-modal-node-agent">{n.agent_name}</span>
+                <span className={`badge badge-${badgeColor(n.status)}`}>{n.status}</span>
+                <span className="tpl-modal-mono">
+                  {n.duration_ms ? `${(n.duration_ms / 1000).toFixed(1)}s` : ''}
+                </span>
+              </button>
+
+              {isOpen && n.error && (
+                <div className="tpl-modal-node-error">{n.error}</div>
+              )}
+              {isOpen && n.output && (
+                <div className="tpl-modal-node-output-wrap">
+                  <div className="tpl-modal-node-output-head">
+                    <span className="tpl-modal-mono">
+                      {n.tokens_input}↓ / {n.tokens_output}↑ tokens
+                    </span>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => copyOutput(n.output)}
+                      title="Copy output"
+                    >
+                      <RiFileCopyLine size={12} /> Copy
+                    </button>
+                  </div>
+                  <pre className="tpl-modal-node-output">{n.output}</pre>
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+
+      <div className="tpl-modal-actions">
+        <button className="btn btn-primary" onClick={onOpenObserve}>
+          Open in Observe →
+        </button>
+        <button className="btn btn-ghost" onClick={onClose}>Close</button>
+      </div>
     </div>
   )
 }
