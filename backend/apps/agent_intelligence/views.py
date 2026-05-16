@@ -23,6 +23,8 @@ from .utils.llm_manager import LLMManager
 from .utils.tool_registry import ToolRegistry
 from .utils.agent_factory import LangGraphAgentFactory
 from .utils.dag_scheduler import DAGScheduler
+from .prompt_guard import guard_task_input, PromptInjectionError
+from .security_logger import log_security_event
 from apps.agent_registry.models import Agent
 from apps.policy_engine.utils import PolicyEvaluator
 from apps.billing.services import BillingService, BudgetExceededError
@@ -200,6 +202,18 @@ class ConversationViewSet(viewsets.ModelViewSet):
             return Response({"error": f"Policy denied: {reason}"}, status=status.HTTP_403_FORBIDDEN)
 
         content = request.data.get("content", "").strip()
+
+        try:
+            guard_task_input(content)
+        except PromptInjectionError as exc:
+            log_security_event(
+                'INJECTION_ATTEMPT',
+                user=request.user,
+                agent=agent,
+                detail=str(exc),
+                request=request,
+            )
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         if decision == "ESCALATE":
             # Snapshot full conversation history so resumption is reliable
@@ -408,6 +422,17 @@ class AgentExecuteView(views.APIView):
         task = serializer.validated_data["task"]
 
         try:
+            guard_task_input(task)
+        except PromptInjectionError as exc:
+            log_security_event(
+                'INJECTION_ATTEMPT',
+                user=request.user,
+                detail=str(exc),
+                request=request,
+            )
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
             agent = Agent.objects.get(id=agent_id, owner=request.user)
         except Agent.DoesNotExist:
             return Response({"error": "Agent not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -507,6 +532,17 @@ class AgentStreamView(views.APIView):
 
         agent_id = serializer.validated_data["agent_id"]
         task = serializer.validated_data["task"]
+
+        try:
+            guard_task_input(task)
+        except PromptInjectionError as exc:
+            log_security_event(
+                'INJECTION_ATTEMPT',
+                user=request.user,
+                detail=str(exc),
+                request=request,
+            )
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             agent = Agent.objects.get(id=agent_id, owner=request.user)

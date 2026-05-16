@@ -3,6 +3,7 @@ from rest_framework import views, viewsets, permissions, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db import models as dj_models
 from django.utils import timezone
 from .models import Policy, PolicyCondition, PolicyAssignment, PolicyAuditLog
 from .serializers import (
@@ -27,7 +28,16 @@ class PolicyViewSet(viewsets.ModelViewSet):
     filterset_fields = ['is_active', 'effect', 'risk_level']
     search_fields = ['name', 'description']
     ordering_fields = ['priority', 'created_at', 'name']
-    
+
+    def get_queryset(self):
+        qs = Policy.objects.all()
+        workspace_id = self.request.query_params.get('workspace_id')
+        if workspace_id:
+            qs = qs.filter(
+                dj_models.Q(workspace_id=workspace_id) | dj_models.Q(workspace__isnull=True)
+            )
+        return qs
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
     
