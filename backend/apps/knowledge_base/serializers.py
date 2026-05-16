@@ -2,6 +2,13 @@ from rest_framework import serializers
 from .models import KnowledgeCollection, Document, DocumentChunk, QueryLog, MemoryTag
 
 
+class MemoryTagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MemoryTag
+        fields = ['id', 'name', 'color', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
 class KnowledgeCollectionSerializer(serializers.ModelSerializer):
     owner_username = serializers.CharField(source='owner.username', read_only=True)
     document_count = serializers.IntegerField(read_only=True)
@@ -16,12 +23,12 @@ class KnowledgeCollectionSerializer(serializers.ModelSerializer):
 class DocumentSerializer(serializers.ModelSerializer):
     collection_name = serializers.CharField(source='collection.name', read_only=True)
     uploaded_by_username = serializers.CharField(source='uploaded_by.username', read_only=True)
-    
+
     class Meta:
         model = Document
         fields = '__all__'
         read_only_fields = [
-            'id', 'uploaded_by', 'uploaded_at', 'status', 
+            'id', 'uploaded_by', 'uploaded_at', 'status',
             'chunk_count', 'error_message', 'file_size'
         ]
         extra_kwargs = {
@@ -29,7 +36,7 @@ class DocumentSerializer(serializers.ModelSerializer):
             'file_type': {'required': True},
             'file': {'required': True},
         }
-    
+
     def validate_file_type(self, value):
         allowed_types = ['pdf', 'docx', 'txt', 'md']
         if value not in allowed_types:
@@ -55,13 +62,6 @@ class QueryLogSerializer(serializers.ModelSerializer):
             'retrieved_chunks', 'relevance_scores', 'tokens_used',
             'retrieval_time_ms', 'generation_time_ms', 'response', 'created_at',
         ]
-        read_only_fields = ['id', 'created_at']
-
-
-class MemoryTagSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = MemoryTag
-        fields = ['id', 'name', 'color', 'created_at']
         read_only_fields = ['id', 'created_at']
 
 
