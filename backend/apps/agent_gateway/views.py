@@ -1,3 +1,4 @@
+import os
 import uuid
 import base64
 import secrets
@@ -332,8 +333,13 @@ class PasswordResetRequestView(APIView):
             expires_at=expires_at,
         )
 
-        # Mock email — print to stdout until an email service is wired up
-        print(f"[PASSWORD RESET] User: {email}  Token: {token_str}  Expires: {expires_at}")
+        # Send via configured transport (Resend/Postmark/SendGrid/SMTP/console fallback)
+        from .notifications import send_email
+        send_email(
+            to=email,
+            template='password_reset',
+            context={'token': token_str},
+        )
 
         return generic_response
 
@@ -461,7 +467,17 @@ class WorkspaceInviteView(APIView):
         )
 
         invite_url = f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/accept-invite?token={token_str}"
-        print(f"[WORKSPACE INVITE] {email} invited to '{workspace.name}' as {role}. URL: {invite_url}")
+        from .notifications import send_email
+        send_email(
+            to=email,
+            template='workspace_invite',
+            context={
+                'inviter': request.user.email,
+                'workspace': workspace.name,
+            },
+            body=f"<p>{request.user.email} invited you to <b>{workspace.name}</b>.</p>"
+                 f"<p><a href='{invite_url}'>Click here to accept</a></p>",
+        )
 
         return Response({
             'detail': 'Invitation created.',
@@ -740,8 +756,12 @@ class EmailVerificationRequestView(APIView):
             email=user.email,
             expires_at=timezone.now() + timedelta(hours=24),
         )
-        # Console-deliver until SMTP wired up
-        print(f"[EMAIL VERIFY] {user.email}: token={token}", flush=True)
+        from .notifications import send_email
+        send_email(
+            to=user.email,
+            template='verify_email',
+            context={'token': token},
+        )
         return Response({'detail': 'Verification email sent.'})
 
 
@@ -857,3 +877,70 @@ class WorkspaceSwitchView(APIView):
                 'plan': ws.plan,
             },
         })
+
+
+# ──────────────────────────────────────────────
+# Contact form (public)
+# ──────────────────────────────────────────────
+
+class ContactFormView(APIView):
+    """POST /auth/contact/ — public contact form. Routes to admin email/Discord."""
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [AuthRateThrottle]
+
+    def post(self, request):
+        name = request.data.get('name', '').strip()
+        email = request.data.get('email', '').strip().lower()
+        message = request.data.get('message', '').strip()
+
+        if not email or not message:
+            return Response(
+                {'detail': 'email and message are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from .notifications import send_email, notify_admin
+
+        admin_to = (
+            getattr(settings, 'CONTACT_FORM_RECIPIENT', None)
+            or os.environ.get('CONTACT_FORM_RECIPIENT')
+            or 'contact@aos-swarm.com'
+        )
+        send_email(
+            to=admin_to,
+            subject=f"[AOS Contact] {name or 'Anonymous'} <{email}>",
+            body=f"<p><b>From:</b> {name or '(no name)'} &lt;{email}&gt;</p>"
+                 f"<p><b>Message:</b></p><pre>{message[:5000]}</pre>",
+        )
+        notify_admin('Contact form submission', {
+            'name': name, 'email': email, 'message': message[:500],
+        })
+
+        return Response({'detail': 'Message sent.'}, status=status.HTTP_201_CREATED)
+
+
+# ──────────────────────────────────────────────
+# Analytics events (server-side track endpoint for PostHog/Mixpanel)
+# ──────────────────────────────────────────────
+
+class AnalyticsTrackView(APIView):
+    """
+    POST /auth/analytics/track/
+    Frontend posts user events here; we forward to PostHog or Mixpanel if a
+    project key is configured, else no-op.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        event = request.data.get('event', '')
+        properties = request.data.get('properties', {})
+        distinct_id = request.data.get('distinct_id') or (
+            str(request.user.id) if request.user.is_authenticated else 'anonymous'
+        )
+
+        if not event:
+            return Response({'detail': 'event is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .analytics_service import track
+        track(event=event, distinct_id=distinct_id, properties=properties)
+        return Response({'tracked': True})

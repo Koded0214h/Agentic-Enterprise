@@ -81,3 +81,28 @@
   font-weight: 600;
 }
 .auth-link:hover { text-decoration: underline; }
+
+/* SSO divider + container */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 18px;
+  color: var(--text-2, #94a3b8);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-2, rgba(255,255,255,0.08));
+}
+.auth-sso {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 18px;
+}

@@ -18,6 +18,10 @@ import AgentsPage from './pages/app/AgentsPage'
 import Observe from './pages/app/Observe'
 import Finance from './pages/app/Finance'
 import IAMPage from './pages/app/IAMPage'
+import Settings from './pages/app/Settings'
+import MemoryViewer from './pages/app/MemoryViewer'
+import WorkflowTemplates from './pages/app/WorkflowTemplates'
+import AgentDetail from './pages/app/AgentDetail'
 import TermsOfService from './pages/TermsOfService'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 
@@ -48,10 +52,14 @@ export default function App() {
             <Route path="approvals" element={<ApprovalsInbox />} />
             <Route path="approvals/:id" element={<ApprovalDetail />} />
             <Route path="agents" element={<AgentsPage />} />
+            <Route path="agents/:id" element={<AgentDetail />} />
             <Route path="observe" element={<Observe />} />
             <Route path="finance" element={<Finance />} />
             <Route path="iam" element={<IAMPage />} />
             <Route path="iam/*" element={<IAMPage />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="memory" element={<MemoryViewer />} />
+            <Route path="templates" element={<WorkflowTemplates />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

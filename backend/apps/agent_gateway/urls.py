@@ -29,6 +29,9 @@ from .views import (
     EmailVerificationConfirmView,
     UserPreferencesView,
     WorkspaceSwitchView,
+    # Contact form + analytics
+    ContactFormView,
+    AnalyticsTrackView,
 )
 from .oauth_views import GoogleSSOView, GitHubSSOView, SAMLSSOView
 
@@ -76,6 +79,12 @@ urlpatterns = [
 
     # User preferences (onboarding + HITL + notifications + active workspace)
     path('auth/preferences/', UserPreferencesView.as_view(), name='user-preferences'),
+
+    # Public contact form
+    path('auth/contact/', ContactFormView.as_view(), name='contact-form'),
+
+    # Server-side analytics relay (PostHog / Mixpanel)
+    path('auth/analytics/track/', AnalyticsTrackView.as_view(), name='analytics-track'),
 
     # ViewSet routes (workspaces CRUD + llm-configs CRUD + test action)
     path('', include(router.urls)),

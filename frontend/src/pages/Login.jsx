@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { auth } from '../api/auth'
+import GoogleSignInButton from '../components/GoogleSignInButton'
 import './Auth.css'
 
 export default function Login() {
@@ -85,6 +86,13 @@ export default function Login() {
             {loading ? 'Signing in…' : 'Sign in →'}
           </button>
         </form>
+
+        <div className="auth-divider">
+          <span>or</span>
+        </div>
+        <div className="auth-sso">
+          <GoogleSignInButton text="signin_with" />
+        </div>
 
         <p className="auth-footer">
           No account?{' '}

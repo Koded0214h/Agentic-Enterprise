@@ -18,19 +18,19 @@
 
 ## Core Platform
 
-* [ ] Production backend deployment
-* [ ] Production frontend deployment
-* [ ] Environment variable management
-* [ ] Production database setup
-* [ ] Redis deployment
-* [ ] HTTPS + SSL
-* [ ] Domain setup (aos-swarm.com)
+* [x] Production backend deployment
+* [x] Production frontend deployment
+* [x] Environment variable management
+* [x] Production database setup
+* [x] Redis deployment
+* [x] HTTPS + SSL
+* [ ] Domain setup (aos-swarm.com) — `agentic-enterprise-smoky.vercel.app` is live, custom domain pending
 * [x] Error logging
 * [x] Health checks
 * [ ] Background worker monitoring
 * [x] CI/CD pipeline
 * [ ] Staging environment
-* [ ] Production environment
+* [x] Production environment
 * [ ] API versioning
 * [ ] Backup strategy
 * [ ] Disaster recovery basics
@@ -47,16 +47,18 @@
 * [x] Password reset
 * [x] Session management
 * [x] Session revocation
-* [ ] Email verification
+* [x] Email verification
 * [x] Secure logout
 * [x] Refresh token flow
+* [x] Sign in with Google
+* [x] Sign in with GitHub
 
 ## User Accounts
 
 * [x] User profile page
 * [x] Workspace creation
 * [x] Team invitations
-* [ ] Workspace switching
+* [x] Workspace switching
 * [x] Basic RBAC
 * [x] User onboarding flow
 * [x] User settings page
@@ -77,15 +79,15 @@
 * [x] Pricing section
 * [x] FAQ section
 * [x] Waitlist form
-* [ ] Contact form
-* [ ] Docs link
+* [x] Contact form
+* [x] Docs link
 * [x] Terms of service
 * [x] Privacy policy
 * [x] Beta signup CTA
 * [x] Founder story section
 * [ ] Blog system
 * [ ] SEO setup
-* [ ] Analytics integration
+* [x] Analytics integration
 
 ---
 
@@ -93,25 +95,25 @@
 
 ## Initial Setup Flow
 
-* [ ] Welcome flow
-* [ ] Workspace setup wizard
+* [x] Welcome flow
+* [x] Workspace setup wizard
 * [x] Startup type selection
 * [x] Team type selection
 * [x] Primary goals selection
 * [x] Agent preferences
 * [x] Provider setup wizard
-* [ ] Budget configuration
-* [ ] Token usage explanation
-* [ ] HITL preference setup
-* [ ] First workflow walkthrough
+* [x] Budget configuration
+* [x] Token usage explanation
+* [x] HITL preference setup
+* [x] First workflow walkthrough
 
 ## Demo Experience
 
-* [ ] Example startup workflow
+* [x] Example startup workflow
 * [x] Demo task templates
-* [ ] Sample outputs
-* [ ] Interactive tutorial
-* [ ] Guided first task
+* [x] Sample outputs
+* [x] Interactive tutorial
+* [x] Guided first task
 
 ---
 
@@ -142,17 +144,17 @@
 * [x] Agent categories
 * [x] Agent search
 * [x] Agent filtering
-* [ ] Agent detail page
+* [x] Agent detail page
 
 ## Agent Coordination
 
 * [x] Planner agent
-* [ ] Task graph creation
-* [ ] Subtask delegation
+* [x] Task graph creation
+* [x] Subtask delegation
 * [x] Workflow orchestration
-* [ ] Multi-agent communication
+* [x] Multi-agent communication
 * [x] Workflow completion logic
-* [ ] Agent dependency handling
+* [x] Agent dependency handling
 
 ---
 
@@ -189,19 +191,19 @@
 * [x] Approve flow
 * [x] Pause execution
 * [x] Resume execution
-* [ ] Approval notifications
+* [x] Approval notifications
 * [x] Approval history
-* [ ] Escalation workflows
-* [ ] Manual intervention tools
+* [x] Escalation workflows
+* [x] Manual intervention tools
 
 ## Approval Triggers
 
 * [x] High-cost actions
-* [ ] Deployment approvals
-* [ ] External publishing approvals
-* [ ] Sensitive tool execution
-* [ ] Destructive actions
-* [ ] Credential access requests
+* [x] Deployment approvals
+* [x] External publishing approvals
+* [x] Sensitive tool execution
+* [x] Destructive actions
+* [x] Credential access requests
 
 ---
 
@@ -259,7 +261,7 @@
 * [x] Slack integration
 * [x] Telegram integration
 * [x] WhatsApp integration
-* [ ] Discord integration
+* [x] Discord integration
 
 ### Marketing
 
@@ -269,9 +271,9 @@
 
 ### Productivity
 
-* [ ] Calendar integration
+* [x] Calendar integration
 * [x] Task scheduling
-* [ ] Reminder system
+* [x] Reminder system
 
 ---
 
@@ -574,18 +576,18 @@
 
 ## User Docs
 
-* [ ] Getting started guide
-* [ ] Workflow tutorials
-* [ ] Agent documentation
-* [ ] Billing explanation
-* [ ] HITL explanation
-* [ ] Governance explanation
-* [ ] Troubleshooting docs
+* [x] Getting started guide
+* [x] Workflow tutorials
+* [x] Agent documentation
+* [x] Billing explanation
+* [x] HITL explanation
+* [x] Governance explanation
+* [x] Troubleshooting docs
 
 ## Developer Docs
 
-* [ ] API docs
-* [ ] MCP integration docs
+* [x] API docs
+* [x] MCP integration docs
 * [ ] SDK docs
 * [ ] Webhook docs
 

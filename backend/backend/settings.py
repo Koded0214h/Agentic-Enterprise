@@ -275,3 +275,33 @@ LOGGING = {
         },
     },
 }
+
+# ───────────────────────────────────────────────────────────────────────────
+# Sentry — error tracking + session replay (no-op if SENTRY_DSN not set)
+# ───────────────────────────────────────────────────────────────────────────
+_SENTRY_DSN = os.environ.get("SENTRY_DSN")
+if _SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.django import DjangoIntegration
+        from sentry_sdk.integrations.celery import CeleryIntegration
+
+        sentry_sdk.init(
+            dsn=_SENTRY_DSN,
+            integrations=[DjangoIntegration(), CeleryIntegration()],
+            environment=os.environ.get("AOS_ENV", "development"),
+            release=os.environ.get("AOS_RELEASE", "1.0.0-beta"),
+            traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+            send_default_pii=False,
+        )
+    except ImportError:
+        pass
+
+# ───────────────────────────────────────────────────────────────────────────
+# Frontend URL — used in invite emails, reset links, etc.
+# ───────────────────────────────────────────────────────────────────────────
+FRONTEND_URL = os.environ.get(
+    "FRONTEND_URL",
+    "https://agentic-enterprise-smoky.vercel.app",
+)
+CONTACT_FORM_RECIPIENT = os.environ.get("CONTACT_FORM_RECIPIENT", "contact@aos-swarm.com")
