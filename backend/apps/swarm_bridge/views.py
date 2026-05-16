@@ -811,7 +811,52 @@ class WorkflowTemplateLaunchView(APIView):
             graph = template["build"](idea)
             graph.id = execution_id
 
+            # Create a SwarmExecutionContext so the replay endpoint has an
+            # anchor for this run (and Observe shows agent/status/engine).
+            ctx = SwarmExecutionContext.objects.create(
+                id=execution_id,
+                aos_agent=None,
+                swarm_agent_name=f"template:{template_id}",
+                engine=SwarmEngine.NATIVE if hasattr(SwarmEngine, "NATIVE") else SwarmEngine.CLAUDE,
+                task_summary=idea[:500],
+                started_at=timezone.now(),
+                status="RUNNING",
+            )
+
             result = asyncio.run(run_graph(graph, execution_id=execution_id))
+
+            # Mark context complete + persist a TraceStep per graph node so the
+            # replay endpoint returns something useful for native runs.
+            from apps.agent_intelligence.models import Conversation, TraceStep
+
+            ctx.status = "COMPLETED" if result.get("success") else "FAILED"
+            ctx.completed_at = timezone.now()
+            ctx.save(update_fields=["status", "completed_at"])
+
+            try:
+                conv, _ = Conversation.objects.get_or_create(
+                    session_id=execution_id,
+                    defaults={"agent": None, "title": f"Template {template_id}"},
+                )
+                for node in result.get("graph", {}).get("nodes", []) or []:
+                    TraceStep.objects.create(
+                        conversation=conv,
+                        node_name=f"{node['id']}:{node['agent_name']}",
+                        input_data={"task": node.get("task", "")[:1000], "depends_on": node.get("depends_on", [])},
+                        output_data={
+                            "status": node.get("status"),
+                            "output": (node.get("output") or "")[:3000],
+                            "error": node.get("error", ""),
+                            "tokens_in": node.get("tokens_input", 0),
+                            "tokens_out": node.get("tokens_output", 0),
+                        },
+                        duration_ms=node.get("duration_ms", 0),
+                    )
+            except Exception as trace_err:
+                # Trace persistence is best-effort — don't fail the response if it errors.
+                import logging
+                logging.getLogger(__name__).warning("Trace persistence failed: %s", trace_err)
+
             return Response({
                 "execution_id": execution_id,
                 "template_id": template_id,
@@ -1103,23 +1148,34 @@ class ExecutionReplayView(APIView):
         from apps.agent_intelligence.models import TraceStep
         from apps.policy_engine.models import PolicyAuditLog
 
-        # Gather trace steps
+        eid_str = str(execution_id)
+
+        # TraceSteps are anchored to a Conversation whose session_id == execution_id
+        # (see SwarmTraceEventView which writes them that way). Match either by
+        # the conversation's session_id OR by trace records that mention this
+        # execution_id in their input/output JSON payload.
         steps = TraceStep.objects.filter(
-            conversation__swarm_executions__id=execution_id
+            conversation__session_id=eid_str
         ).order_by("created_at").values(
             "id", "node_name", "input_data", "output_data",
             "duration_ms", "risk_score", "is_loop", "created_at",
         )
 
-        # Gather policy decisions
-        policy_logs = PolicyAuditLog.objects.filter(
-            agent__swarm_executions__id=execution_id
-        ).order_by("evaluated_at").values(
-            "id", "policy__name", "effect", "reason",
-            "risk_score", "evaluated_at",
-        )
+        # PolicyAuditLog has no direct execution_id; filter by the agent that
+        # ran this execution. We resolve the agent from SwarmExecutionContext.
+        ctx = SwarmExecutionContext.objects.filter(id=execution_id).first()
+        policy_logs = []
+        if ctx and ctx.aos_agent_id:
+            policy_logs = list(
+                PolicyAuditLog.objects.filter(
+                    agent_id=ctx.aos_agent_id,
+                    created_at__gte=ctx.started_at,
+                ).order_by("created_at").values(
+                    "id", "policy__name", "decision", "reason",
+                    "resource", "action", "created_at",
+                )
+            )
 
-        # Interleave by timestamp
         events = []
         for step in steps:
             events.append({
@@ -1136,18 +1192,18 @@ class ExecutionReplayView(APIView):
         for log in policy_logs:
             events.append({
                 "source": "policy",
-                "timestamp": log["evaluated_at"].isoformat() if log["evaluated_at"] else None,
+                "timestamp": log["created_at"].isoformat() if log["created_at"] else None,
                 "policy": log["policy__name"],
-                "effect": log["effect"],
+                "decision": log["decision"],
+                "resource": log["resource"],
+                "action": log["action"],
                 "reason": log["reason"],
-                "risk_score": log["risk_score"],
             })
 
         events.sort(key=lambda e: e["timestamp"] or "")
 
-        ctx = SwarmExecutionContext.objects.filter(id=execution_id).first()
         return Response({
-            "execution_id": str(execution_id),
+            "execution_id": eid_str,
             "agent": ctx.swarm_agent_name if ctx else None,
             "status": ctx.status if ctx else None,
             "engine": ctx.engine if ctx else None,
