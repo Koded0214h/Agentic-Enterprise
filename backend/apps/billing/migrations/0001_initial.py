@@ -51,6 +51,8 @@ class Migration(migrations.Migration):
                 ('currency', models.CharField(default='USD', max_length=3)),
                 ('resource_id', models.UUIDField(blank=True, null=True)),
                 ('resource_type', models.CharField(blank=True, max_length=50)),
+                ('workflow_id', models.UUIDField(blank=True, db_index=True, null=True)),
+                ('workflow_name', models.CharField(blank=True, max_length=255)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('agent', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='usage_records', to='agent_registry.agent')),
                 ('department', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='usage_records', to='billing.departmentcostcenter')),

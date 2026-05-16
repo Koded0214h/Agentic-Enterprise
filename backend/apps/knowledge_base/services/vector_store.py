@@ -1,8 +1,13 @@
 import os
 import logging
 from django.conf import settings
-import chromadb
-from chromadb.config import Settings
+
+try:
+    import chromadb
+    from chromadb.config import Settings
+except ImportError:  # pragma: no cover - optional runtime dependency
+    chromadb = None
+    Settings = None
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +26,8 @@ class VectorStoreService:
     
     def _initialize(self):
         """Initialize ChromaDB client"""
+        if chromadb is None or Settings is None:
+            raise ImportError("chromadb is required for vector store operations")
         persist_dir = getattr(settings, 'VECTOR_STORE_PATH', './chroma_db')
         os.makedirs(persist_dir, exist_ok=True)
         
