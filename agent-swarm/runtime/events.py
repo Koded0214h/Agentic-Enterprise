@@ -61,6 +61,13 @@ class EventType:
     TASK_COMPLETED      = "task.completed"
     TASK_FAILED         = "task.failed"
 
+    # Workflow / DAG lifecycle (multi-agent orchestration)
+    WORKFLOW_STARTED    = "workflow.started"
+    WORKFLOW_COMPLETED  = "workflow.completed"
+    WORKFLOW_FAILED     = "workflow.failed"
+    WORKFLOW_CANCELLED  = "workflow.cancelled"
+    AGENT_MESSAGE       = "agent.message"
+
     # Agent lifecycle
     AGENT_DISPATCHED    = "agent.dispatched"
     AGENT_STARTED       = "agent.started"

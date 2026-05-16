@@ -780,6 +780,62 @@ class ExecutionCancelView(APIView):
         return Response({"ok": True, "execution_id": str(execution_id), "detail": "Cancellation signal sent"})
 
 
+class WorkflowGraphRunView(APIView):
+    """
+    POST /api/swarm/workflows/graph/
+    Run a multi-agent DAG. Body:
+      {
+        "nodes": [
+          {"id": "a", "agent": "planner", "task": "...", "depends_on": []},
+          {"id": "b", "agent": "engineering-backend-architect", "task": "...", "depends_on": ["a"]},
+          ...
+        ],
+        "permissions": ["file.read", "github.read"]
+      }
+    Returns the orchestration result with per-node status.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        nodes_in = request.data.get("nodes") or []
+        if not nodes_in:
+            return Response({"detail": "nodes is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        default_perms = request.data.get("permissions") or ["file.read"]
+        execution_id = str(uuid.uuid4())
+
+        try:
+            import asyncio
+            import sys as _sys
+            _sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "agent-swarm"))
+            from runtime import TaskGraph, TaskNode, run_graph
+
+            graph = TaskGraph(id=execution_id)
+            for nd in nodes_in:
+                graph.add(TaskNode(
+                    id=str(nd["id"]),
+                    agent_name=str(nd["agent"]),
+                    task=str(nd.get("task", "")),
+                    depends_on=list(nd.get("depends_on", [])),
+                    permissions=list(nd.get("permissions", default_perms)),
+                    timeout_seconds=int(nd.get("timeout_seconds", 600)),
+                    workspace_dir=str(nd.get("workspace_dir", ".")),
+                    department_id=str(nd.get("department_id", "")),
+                    agent_category=str(nd.get("agent_category", "")),
+                ))
+            result = asyncio.run(run_graph(graph, execution_id=execution_id))
+            return Response(result)
+        except ImportError:
+            return Response(
+                {"detail": "Swarm runtime not available in this environment."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class CouncilReviewView(APIView):
     """
     POST /api/swarm/council/review/

@@ -31,6 +31,8 @@ from .models import (
     BetaInviteCode,
     BetaTesterProfile,
     FeedbackEntry,
+    EmailVerificationToken,
+    UserPreferences,
 )
 from .serializers import AgentLoginSerializer, AgentSessionSerializer
 from .authentication import AgentAuthentication
@@ -714,3 +716,144 @@ class FeedbackView(APIView):
             'detail': 'Feedback submitted.',
             'id': str(entry.id),
         }, status=status.HTTP_201_CREATED)
+
+
+# ──────────────────────────────────────────────
+# Email Verification
+# ──────────────────────────────────────────────
+
+class EmailVerificationRequestView(APIView):
+    """POST /auth/email/send-verification/ — issue a token for the current user's email."""
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [AuthRateThrottle]
+
+    def post(self, request):
+        user = request.user
+        # Reuse an active unverified token if one exists
+        EmailVerificationToken.objects.filter(
+            user=user, verified_at__isnull=True, expires_at__lt=timezone.now()
+        ).delete()
+        token = secrets.token_urlsafe(32)
+        EmailVerificationToken.objects.create(
+            user=user,
+            token=token,
+            email=user.email,
+            expires_at=timezone.now() + timedelta(hours=24),
+        )
+        # Console-deliver until SMTP wired up
+        print(f"[EMAIL VERIFY] {user.email}: token={token}", flush=True)
+        return Response({'detail': 'Verification email sent.'})
+
+
+class EmailVerificationConfirmView(APIView):
+    """POST /auth/email/verify/ — confirm a verification token."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        token = request.data.get('token', '').strip()
+        if not token:
+            return Response({'detail': 'token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            record = EmailVerificationToken.objects.select_related('user').get(token=token)
+        except EmailVerificationToken.DoesNotExist:
+            return Response({'detail': 'Invalid token.'}, status=status.HTTP_400_BAD_REQUEST)
+        if record.verified_at:
+            return Response({'detail': 'Email already verified.'})
+        if record.expires_at < timezone.now():
+            return Response({'detail': 'Token expired.'}, status=status.HTTP_400_BAD_REQUEST)
+        record.verified_at = timezone.now()
+        record.save(update_fields=['verified_at'])
+        prefs, _ = UserPreferences.objects.get_or_create(user=record.user)
+        prefs.email_verified = True
+        prefs.save(update_fields=['email_verified'])
+        return Response({'detail': 'Email verified.', 'user_id': record.user.id})
+
+
+# ──────────────────────────────────────────────
+# User Preferences (settings, HITL, onboarding state, active workspace)
+# ──────────────────────────────────────────────
+
+class UserPreferencesView(APIView):
+    """GET / PATCH /auth/preferences/ — read or update the current user's preferences."""
+    permission_classes = [IsAuthenticated]
+
+    def _serialize(self, prefs: UserPreferences) -> dict:
+        return {
+            'email_verified': prefs.email_verified,
+            'onboarding_completed': prefs.onboarding_completed,
+            'onboarding_step': prefs.onboarding_step,
+            'active_workspace': str(prefs.active_workspace_id) if prefs.active_workspace_id else None,
+            'hitl_level': prefs.hitl_level,
+            'hitl_cost_threshold': str(prefs.hitl_cost_threshold),
+            'monthly_token_budget': prefs.monthly_token_budget,
+            'notify_on_approval': prefs.notify_on_approval,
+            'notify_on_failure': prefs.notify_on_failure,
+            'notify_on_budget': prefs.notify_on_budget,
+            'notify_in_app': prefs.notify_in_app,
+        }
+
+    def get(self, request):
+        prefs, _ = UserPreferences.objects.get_or_create(user=request.user)
+        return Response(self._serialize(prefs))
+
+    def patch(self, request):
+        prefs, _ = UserPreferences.objects.get_or_create(user=request.user)
+        editable = {
+            'onboarding_completed', 'onboarding_step',
+            'hitl_level', 'hitl_cost_threshold', 'monthly_token_budget',
+            'notify_on_approval', 'notify_on_failure', 'notify_on_budget', 'notify_in_app',
+        }
+        for field, value in request.data.items():
+            if field in editable:
+                setattr(prefs, field, value)
+        # Workspace switching: validate membership
+        if 'active_workspace' in request.data:
+            ws_id = request.data['active_workspace']
+            if ws_id is None:
+                prefs.active_workspace = None
+            else:
+                try:
+                    ws = Workspace.objects.get(id=ws_id)
+                    if ws.owner_id == request.user.id or WorkspaceMembership.objects.filter(
+                        workspace=ws, user=request.user
+                    ).exists():
+                        prefs.active_workspace = ws
+                    else:
+                        return Response(
+                            {'detail': 'Not a member of that workspace.'},
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
+                except Workspace.DoesNotExist:
+                    return Response({'detail': 'Workspace not found.'}, status=status.HTTP_404_NOT_FOUND)
+        prefs.save()
+        return Response(self._serialize(prefs))
+
+
+class WorkspaceSwitchView(APIView):
+    """POST /auth/workspaces/switch/ — set the active workspace for the user."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        ws_id = request.data.get('workspace_id')
+        if not ws_id:
+            return Response({'detail': 'workspace_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            ws = Workspace.objects.get(id=ws_id)
+        except Workspace.DoesNotExist:
+            return Response({'detail': 'Workspace not found.'}, status=status.HTTP_404_NOT_FOUND)
+        is_member = ws.owner_id == request.user.id or WorkspaceMembership.objects.filter(
+            workspace=ws, user=request.user
+        ).exists()
+        if not is_member:
+            return Response({'detail': 'Not a member.'}, status=status.HTTP_403_FORBIDDEN)
+        prefs, _ = UserPreferences.objects.get_or_create(user=request.user)
+        prefs.active_workspace = ws
+        prefs.save(update_fields=['active_workspace'])
+        return Response({
+            'active_workspace': {
+                'id': str(ws.id),
+                'name': ws.name,
+                'slug': ws.slug,
+                'plan': ws.plan,
+            },
+        })

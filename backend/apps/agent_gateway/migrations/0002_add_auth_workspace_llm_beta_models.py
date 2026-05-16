@@ -96,6 +96,7 @@ class Migration(migrations.Migration):
             field=models.ManyToManyField(
                 related_name='workspaces',
                 through='agent_gateway.WorkspaceMembership',
+                through_fields=('workspace', 'user'),
                 to=settings.AUTH_USER_MODEL,
             ),
         ),

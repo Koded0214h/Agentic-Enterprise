@@ -24,6 +24,11 @@ from .views import (
     # Beta / feedback
     BetaInviteCodeValidateView,
     FeedbackView,
+    # Email verification + preferences + workspace switching
+    EmailVerificationRequestView,
+    EmailVerificationConfirmView,
+    UserPreferencesView,
+    WorkspaceSwitchView,
 )
 from .oauth_views import GoogleSSOView, GitHubSSOView, SAMLSSOView
 
@@ -63,6 +68,14 @@ urlpatterns = [
     # Task 4 – Workspace sub-actions (non-viewset routes)
     path('workspaces/<uuid:workspace_id>/invite/', WorkspaceInviteView.as_view(), name='workspace-invite'),
     path('workspaces/accept-invite/', WorkspaceAcceptInviteView.as_view(), name='workspace-accept-invite'),
+    path('workspaces/switch/', WorkspaceSwitchView.as_view(), name='workspace-switch'),
+
+    # Email verification
+    path('auth/email/send-verification/', EmailVerificationRequestView.as_view(), name='email-verify-send'),
+    path('auth/email/verify/', EmailVerificationConfirmView.as_view(), name='email-verify-confirm'),
+
+    # User preferences (onboarding + HITL + notifications + active workspace)
+    path('auth/preferences/', UserPreferencesView.as_view(), name='user-preferences'),
 
     # ViewSet routes (workspaces CRUD + llm-configs CRUD + test action)
     path('', include(router.urls)),

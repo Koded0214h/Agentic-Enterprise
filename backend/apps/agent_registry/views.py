@@ -57,11 +57,73 @@ class AgentViewSet(viewsets.ModelViewSet):
         task_description = request.data.get("task")
         if not task_description:
             return Response({"error": "Task description required"}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # Trigger Celery task
         execute_agent_background.delay(str(agent.id), task_description)
-        
+
         return Response({"status": "Task queued for background execution"})
+
+    @action(detail=True, methods=["get"])
+    def detail_full(self, request, pk=None):
+        """
+        GET /api/registry/agents/<id>/detail_full/
+        Enriched agent detail — capability, recent traces, budget, manifest,
+        recent conversations. Powers the frontend agent detail page.
+        """
+        from apps.agent_intelligence.models import (
+            AgentCapability, TraceStep, Conversation,
+        )
+        from apps.billing.models import AgentBudget
+        from apps.swarm_bridge.models import SwarmAgentManifest
+        from django.utils import timezone
+        from datetime import timedelta
+
+        agent = self.get_object()
+        since = timezone.now() - timedelta(days=7)
+
+        capability = AgentCapability.objects.filter(agent=agent).first()
+        budget = AgentBudget.objects.filter(agent=agent).first()
+        manifest = SwarmAgentManifest.objects.filter(aos_agent=agent).first()
+
+        recent_traces = list(
+            TraceStep.objects.filter(agent=agent, created_at__gte=since)
+            .order_by("-created_at")
+            .values("id", "step_type", "summary", "created_at")[:25]
+        )
+
+        recent_convos = list(
+            Conversation.objects.filter(agent=agent)
+            .order_by("-created_at")
+            .values("id", "title", "created_at")[:10]
+        )
+
+        return Response({
+            "agent": AgentSerializer(agent).data,
+            "capability": {
+                "system_prompt": (capability.system_prompt[:2000] + "…") if capability and capability.system_prompt and len(capability.system_prompt) > 2000 else (capability.system_prompt if capability else ""),
+                "model": getattr(capability, "model", "") if capability else "",
+                "max_iterations": getattr(capability, "max_iterations", 10) if capability else 10,
+                "tools_enabled": getattr(capability, "tools", []) if capability else [],
+            } if capability else None,
+            "budget": {
+                "monthly_limit": str(budget.monthly_limit) if budget else None,
+                "current_month_spend": str(budget.current_month_spend) if budget else None,
+                "alert_threshold_percentage": getattr(budget, "alert_threshold_percentage", 80) if budget else None,
+                "is_active": budget.is_active if budget else False,
+            } if budget else None,
+            "manifest": {
+                "swarm_name": manifest.swarm_name,
+                "source_category": manifest.source_category,
+                "file_path": manifest.file_path,
+                "preferred_engine": manifest.preferred_engine,
+            } if manifest else None,
+            "recent_traces": recent_traces,
+            "recent_conversations": recent_convos,
+            "stats": {
+                "traces_last_7d": len(recent_traces),
+                "conversations_last_7d": len(recent_convos),
+            },
+        })
 
 
 class RoleViewSet(viewsets.ModelViewSet):

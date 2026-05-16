@@ -16,6 +16,7 @@ from .views import (
     ExecutionReplayView,
     ExecutionCancelView,
     CouncilReviewView,
+    WorkflowGraphRunView,
 )
 
 urlpatterns = [
@@ -64,6 +65,9 @@ urlpatterns = [
 
     # Council multi-agent review
     path("council/review/", CouncilReviewView.as_view(), name="swarm-council-review"),
+
+    # Multi-agent DAG / workflow graph execution
+    path("workflows/graph/", WorkflowGraphRunView.as_view(), name="swarm-workflow-graph"),
 
     # Swarm run lifecycle
     path("run/",                          SwarmRunView.as_view(),        name="swarm-run"),

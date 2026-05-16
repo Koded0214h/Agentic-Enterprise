@@ -34,6 +34,14 @@ import uuid
 
 from .events import EventType, TraceEmitter, get_bus
 from .jobs import AgentJob, RetryPolicy, enqueue
+from .orchestration import (
+    AgentMessage,
+    AgentMessageBus,
+    GraphOrchestrator,
+    TaskGraph,
+    TaskNode,
+    delegate_subtask,
+)
 from .providers import get_provider
 from .recovery import RecoveryEngine
 from .tools import ToolRegistry
@@ -144,6 +152,7 @@ def enqueue_agent(
 __all__ = [
     "run_agent",
     "enqueue_agent",
+    "run_graph",
     "AgentJob",
     "AgentResult",
     "AgentDefinition",
@@ -152,4 +161,58 @@ __all__ = [
     "get_bus",
     "ToolRegistry",
     "RecoveryEngine",
+    # Multi-agent orchestration
+    "TaskGraph",
+    "TaskNode",
+    "GraphOrchestrator",
+    "AgentMessage",
+    "AgentMessageBus",
+    "delegate_subtask",
 ]
+
+
+async def run_graph(graph: TaskGraph, execution_id: str | None = None) -> dict:
+    """
+    Run a TaskGraph end-to-end with the native agent runtime as node executor.
+    Each TaskNode is executed by run_agent, with upstream outputs injected
+    into the prompt as ``## Upstream results`` context.
+    """
+    eid = execution_id or str(uuid.uuid4())
+
+    async def _executor(node: TaskNode, upstream: dict[str, dict], bus: AgentMessageBus) -> dict:
+        # Compose a context block from upstream outputs
+        context_block = ""
+        if upstream:
+            parts = []
+            for dep_id, out in upstream.items():
+                txt = (out or {}).get("output", "")
+                if txt:
+                    parts.append(f"### From {dep_id}\n{txt[:1500]}")
+            if parts:
+                context_block = "\n\n## Upstream results\n\n" + "\n\n".join(parts)
+
+        # Drain any inter-agent messages directed at this node's agent
+        msgs = bus.inbox(node.agent_name)
+        if msgs:
+            context_block += "\n\n## Messages from peer agents\n\n" + "\n".join(
+                f"- {m.sender}: {str(m.payload)[:500]}" for m in msgs
+            )
+
+        composed_task = node.task + context_block
+
+        result = await run_agent(
+            agent_name=node.agent_name,
+            task=composed_task,
+            permissions=node.permissions,
+            execution_id=f"{eid}:{node.id}",
+            workspace_dir=node.workspace_dir,
+            department_id=node.department_id,
+            agent_category=node.agent_category,
+            timeout_seconds=node.timeout_seconds,
+        )
+        if not result.success:
+            raise RuntimeError(result.error or "Agent execution failed")
+        return result.to_dict()
+
+    orchestrator = GraphOrchestrator(graph=graph, executor=_executor, execution_id=eid)
+    return await orchestrator.run()

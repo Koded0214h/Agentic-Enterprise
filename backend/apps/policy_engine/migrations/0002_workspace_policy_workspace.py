@@ -1,35 +1,20 @@
 import django.db.models.deletion
-import uuid
-from django.conf import settings
 from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
+    """
+    Adds the workspace scoping foreign key to Policy.
+    The Workspace model itself lives in apps.agent_gateway — single source
+    of truth — so this migration only depends on that app having created it.
+    """
 
     dependencies = [
         ('policy_engine', '0001_initial'),
-        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+        ('agent_gateway', '0002_add_auth_workspace_llm_beta_models'),
     ]
 
     operations = [
-        migrations.CreateModel(
-            name='Workspace',
-            fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=255, unique=True)),
-                ('slug', models.SlugField(max_length=100, unique=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('owner', models.ForeignKey(
-                    on_delete=django.db.models.deletion.CASCADE,
-                    related_name='workspaces',
-                    to=settings.AUTH_USER_MODEL,
-                )),
-            ],
-            options={
-                'ordering': ['name'],
-            },
-        ),
         migrations.AddField(
             model_name='policy',
             name='workspace',
@@ -39,7 +24,7 @@ class Migration(migrations.Migration):
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
                 related_name='policies',
-                to='policy_engine.workspace',
+                to='agent_gateway.workspace',
             ),
         ),
     ]

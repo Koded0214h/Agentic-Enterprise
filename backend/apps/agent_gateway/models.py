@@ -81,6 +81,7 @@ class Workspace(models.Model):
     members = models.ManyToManyField(
         User,
         through='WorkspaceMembership',
+        through_fields=('workspace', 'user'),
         related_name='workspaces',
     )
     plan = models.CharField(max_length=50, default='starter', choices=PLAN_CHOICES)
@@ -131,6 +132,57 @@ class WorkspaceInvitation(models.Model):
 
     def __str__(self):
         return f"Invite({self.email} -> {self.workspace})"
+
+
+# ──────────────────────────────────────────────
+# Email Verification
+# ──────────────────────────────────────────────
+
+class EmailVerificationToken(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='email_verification_tokens')
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    email = models.EmailField()  # snapshot of email at issuance
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"EmailVerificationToken({self.user_id}, verified={self.verified_at is not None})"
+
+
+# ──────────────────────────────────────────────
+# User Preferences (onboarding + HITL + workspace)
+# ──────────────────────────────────────────────
+
+class UserPreferences(models.Model):
+    """Per-user settings — onboarding state, HITL preferences, active workspace."""
+    HITL_LEVELS = [
+        ('strict', 'Strict — approve every external action'),
+        ('standard', 'Standard — approve high-stakes only'),
+        ('lenient', 'Lenient — log only, no blocking'),
+        ('off', 'Off — fully autonomous'),
+    ]
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='preferences', primary_key=True)
+    email_verified = models.BooleanField(default=False)
+    onboarding_completed = models.BooleanField(default=False)
+    onboarding_step = models.CharField(max_length=50, default='welcome')
+    active_workspace = models.ForeignKey(
+        'Workspace', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='active_for_users',
+    )
+    hitl_level = models.CharField(max_length=20, choices=HITL_LEVELS, default='standard')
+    hitl_cost_threshold = models.DecimalField(max_digits=10, decimal_places=2, default=10.00)
+    monthly_token_budget = models.IntegerField(default=50000)
+    notify_on_approval = models.BooleanField(default=True)
+    notify_on_failure = models.BooleanField(default=True)
+    notify_on_budget = models.BooleanField(default=True)
+    notify_in_app = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"UserPreferences({self.user_id})"
 
 
 # ──────────────────────────────────────────────
