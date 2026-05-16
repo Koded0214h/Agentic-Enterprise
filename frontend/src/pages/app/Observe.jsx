@@ -1,11 +1,13 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   RiEyeLine, RiRadioButtonLine, RiFileSearchLine, RiAlertLine, RiShieldLine,
   RiCheckLine, RiCloseLine, RiTimeLine, RiRefreshLine, RiArrowRightSLine,
-  RiPulseLine, RiErrorWarningLine, RiInformationLine,
+  RiPulseLine, RiErrorWarningLine, RiInformationLine, RiBarChart2Line,
+  RiLineChartLine, RiListCheck2, RiSpeedLine,
 } from 'react-icons/ri'
 import { observe } from '../../api/observe'
 import { agents as agentsAPI } from '../../api/agents'
+import { api } from '../../api/client'
 import './Observe.css'
 
 const TABS = [
@@ -14,6 +16,7 @@ const TABS = [
   { id: 'traces',   label: 'Traces',            Icon: RiFileSearchLine },
   { id: 'anomalies',label: 'Anomalies',         Icon: RiAlertLine },
   { id: 'breakers', label: 'Circuit Breakers',  Icon: RiShieldLine },
+  { id: 'metrics',  label: 'Metrics',           Icon: RiBarChart2Line },
 ]
 
 const RISK_ICON = { green: <RiCheckLine size={13} color="var(--green)" />, amber: <RiErrorWarningLine size={13} color="var(--amber)" />, red: <RiCloseLine size={13} color="var(--red)" /> }
@@ -57,6 +60,7 @@ export default function Observe() {
       {tab === 'traces'   && <TraceExplorer />}
       {tab === 'anomalies'&& <Anomalies />}
       {tab === 'breakers' && <CircuitBreakers />}
+      {tab === 'metrics'  && <MetricsDashboard />}
     </div>
   )
 }
@@ -444,6 +448,192 @@ function CircuitBreakers() {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+function MetricsDashboard() {
+  const [usage, setUsage] = useState([])
+  const [tasks, setTasks] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/billing/usage/?limit=30').catch(() => []),
+      observe.tasks().catch(() => ({ results: [] })),
+    ]).then(([u, t]) => {
+      const arr = Array.isArray(u) ? u : (u?.results || [])
+      setUsage(arr)
+      setTasks(t?.results || [])
+    }).finally(() => setLoading(false))
+  }, [])
+
+  // Group usage by date
+  const byDate = useMemo(() => {
+    const map = {}
+    usage.forEach(u => {
+      const d = (u.created_at || u.date || '').slice(0, 10)
+      if (!d) return
+      if (!map[d]) map[d] = { input: 0, output: 0, cost: 0 }
+      map[d].input  += u.tokens_input  || 0
+      map[d].output += u.tokens_output || 0
+      map[d].cost   += parseFloat(u.cost || 0)
+    })
+    return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0])).slice(-14)
+  }, [usage])
+
+  const maxTokens = Math.max(1, ...byDate.map(([, v]) => v.input + v.output))
+  const maxCost   = Math.max(0.0001, ...byDate.map(([, v]) => v.cost))
+
+  // Runtime metrics from tasks
+  const totalExec  = tasks.length
+  const succeeded  = tasks.filter(t => t.status === 'COMPLETED').length
+  const successRate = totalExec > 0 ? ((succeeded / totalExec) * 100).toFixed(1) : '—'
+
+  const QUEUE = { critical: 0, standard: 0, batch: 0 }
+
+  const W = 420
+  const H = 80
+  const pts = byDate.map(([, v], i) => {
+    const x = byDate.length < 2 ? W / 2 : (i / (byDate.length - 1)) * W
+    const y = H - (v.cost / maxCost) * H
+    return `${x},${y}`
+  }).join(' ')
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* Token usage bar chart */}
+      <div className="card">
+        <div className="obs-metrics-head">
+          <RiBarChart2Line size={15} />
+          <span>Token usage — last 14 days</span>
+        </div>
+        {loading ? (
+          <div className="obs-empty" style={{ padding: '30px 0' }}>
+            <div className="aos-loader" style={{ minHeight: 'unset' }}><span /></div>
+          </div>
+        ) : byDate.length === 0 ? (
+          <EmptyState icon={<RiBarChart2Line size={28} />} text="No usage data yet. Run agents to populate token metrics." />
+        ) : (
+          <div className="obs-bar-chart">
+            {byDate.map(([date, v]) => {
+              const inH  = ((v.input)  / maxTokens) * 100
+              const outH = ((v.output) / maxTokens) * 100
+              return (
+                <div key={date} className="obs-bar-col" title={`${date}\nInput: ${v.input.toLocaleString()}\nOutput: ${v.output.toLocaleString()}`}>
+                  <div className="obs-bar-stack">
+                    <div className="obs-bar-seg obs-bar-output" style={{ height: `${outH}%` }} />
+                    <div className="obs-bar-seg obs-bar-input"  style={{ height: `${inH}%`  }} />
+                  </div>
+                  <div className="obs-bar-label">{date.slice(5)}</div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <div className="obs-chart-legend">
+          <span><span className="obs-legend-dot" style={{ background: '#6b9cff' }} />Input tokens</span>
+          <span><span className="obs-legend-dot" style={{ background: '#a855f7' }} />Output tokens</span>
+        </div>
+      </div>
+
+      {/* Cost trend SVG polyline */}
+      <div className="card">
+        <div className="obs-metrics-head">
+          <RiLineChartLine size={15} />
+          <span>Daily cost trend</span>
+        </div>
+        {loading ? (
+          <div className="obs-empty" style={{ padding: '30px 0' }}>
+            <div className="aos-loader" style={{ minHeight: 'unset' }}><span /></div>
+          </div>
+        ) : byDate.length < 2 ? (
+          <EmptyState icon={<RiLineChartLine size={28} />} text="Need at least 2 days of usage data to draw a trend." />
+        ) : (
+          <div className="obs-svg-wrap">
+            <svg viewBox={`0 0 ${W} ${H}`} className="obs-cost-svg" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="cost-grad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.25" />
+                  <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <polygon
+                points={`0,${H} ${pts} ${W},${H}`}
+                fill="url(#cost-grad)"
+              />
+              <polyline
+                points={pts}
+                fill="none"
+                stroke="var(--accent)"
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            </svg>
+            <div className="obs-svg-axis">
+              {byDate.filter((_, i) => i % Math.ceil(byDate.length / 5) === 0).map(([d]) => (
+                <span key={d}>{d.slice(5)}</span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {/* Queue monitoring */}
+        <div className="card">
+          <div className="obs-metrics-head">
+            <RiListCheck2 size={15} />
+            <span>Queue status</span>
+          </div>
+          {[
+            { key: 'critical', label: 'Critical queue', color: 'var(--red)' },
+            { key: 'standard', label: 'Standard queue', color: 'var(--accent)' },
+            { key: 'batch',    label: 'Batch queue',    color: 'var(--green)' },
+          ].map(q => (
+            <div key={q.key} className="obs-queue-row">
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: q.color, flexShrink: 0 }} />
+              <span className="obs-queue-label">{q.label}</span>
+              <span className="obs-queue-count">{QUEUE[q.key]}</span>
+              <span className={`badge badge-${QUEUE[q.key] === 0 ? 'green' : 'amber'}`} style={{ fontSize: 10 }}>
+                {QUEUE[q.key] === 0 ? 'idle' : 'queued'}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Runtime metrics */}
+        <div className="card">
+          <div className="obs-metrics-head">
+            <RiSpeedLine size={15} />
+            <span>Runtime metrics</span>
+          </div>
+          <div className="obs-runtime-grid">
+            <div className="obs-runtime-stat">
+              <span className="obs-runtime-val">{totalExec}</span>
+              <span className="obs-runtime-label">Total executions</span>
+            </div>
+            <div className="obs-runtime-stat">
+              <span className="obs-runtime-val" style={{ color: 'var(--green)' }}>
+                {successRate}{totalExec > 0 ? '%' : ''}
+              </span>
+              <span className="obs-runtime-label">Success rate</span>
+            </div>
+            <div className="obs-runtime-stat">
+              <span className="obs-runtime-val">{succeeded}</span>
+              <span className="obs-runtime-label">Completed</span>
+            </div>
+            <div className="obs-runtime-stat">
+              <span className="obs-runtime-val" style={{ color: 'var(--red)' }}>
+                {tasks.filter(t => t.status === 'FAILED').length}
+              </span>
+              <span className="obs-runtime-label">Failed</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

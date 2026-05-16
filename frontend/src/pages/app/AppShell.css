@@ -257,6 +257,83 @@
   justify-content: center;
 }
 
+/* ── Notification dropdown ── */
+.shell-bell-wrap {
+  position: relative;
+}
+
+.shell-notif-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 300px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  z-index: 50;
+  overflow: hidden;
+}
+
+.shell-notif-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+
+.shell-notif-empty {
+  padding: 20px 14px;
+  font-size: 12px;
+  color: var(--text);
+  text-align: center;
+}
+
+.shell-notif-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  text-decoration: none;
+  transition: background 0.1s;
+}
+.shell-notif-item:hover { background: var(--bg-3); }
+
+.shell-notif-item-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+.shell-notif-item-action {
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-notif-view-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  transition: background 0.1s;
+}
+.shell-notif-view-all:hover { background: var(--accent-dim); }
+
 /* ── Run Swarm button ── */
 .shell-run-swarm {
   display: flex;
