@@ -33,6 +33,8 @@ from apps.billing.models import UsageRecord
 from apps.policy_engine.models import PolicyAuditLog, PolicyEffect
 from apps.policy_engine.utils import PolicyEvaluator
 from apps.agent_intelligence.models import TraceStep
+from apps.agent_intelligence.prompt_guard import guard_task_input, PromptInjectionError
+from apps.agent_intelligence.security_logger import log_security_event
 
 from .models import SwarmExecutionContext, SwarmAgentManifest, SwarmEngine
 from .serializers import (
@@ -152,6 +154,17 @@ class SwarmPolicyCheckView(APIView):
         serializer = SwarmPolicyCheckSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+
+        try:
+            guard_task_input(data["task"])
+        except PromptInjectionError as exc:
+            log_security_event(
+                'INJECTION_ATTEMPT',
+                user=request.user,
+                detail=str(exc),
+                request=request,
+            )
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         execution_id = data["execution_id"]
         agent_name = data["agent_name"]
@@ -514,6 +527,17 @@ class SwarmRunView(APIView):
 
         if not goal:
             return Response({"error": "goal is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            guard_task_input(goal)
+        except PromptInjectionError as exc:
+            log_security_event(
+                'INJECTION_ATTEMPT',
+                user=request.user,
+                detail=str(exc),
+                request=request,
+            )
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         orchestrator = _SWARM_ROOT / "orchestrator.py"
         if not orchestrator.exists():

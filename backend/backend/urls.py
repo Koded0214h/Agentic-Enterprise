@@ -16,10 +16,29 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
+from django.views import View
+from django.db import connection
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
+
+class HealthCheckView(View):
+    def get(self, request):
+        try:
+            connection.ensure_connection()
+            db_ok = True
+        except Exception:
+            db_ok = False
+        status_code = 200 if db_ok else 503
+        return JsonResponse({
+            'status': 'healthy' if db_ok else 'degraded',
+            'db': 'ok' if db_ok else 'error',
+            'version': '1.0.0-beta',
+        }, status=status_code)
+
 urlpatterns = [
+    path('health/', HealthCheckView.as_view(), name='health'),
     path('admin/', admin.site.urls),
     path('', include('django_prometheus.urls')),
     

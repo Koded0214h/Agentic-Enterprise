@@ -13,6 +13,7 @@ from apps.agent_registry.models import Agent
 from .models import AgentSession, AgentRequestLog
 from .serializers import AgentLoginSerializer, AgentSessionSerializer
 from .authentication import AgentAuthentication
+from .throttles import AuthRateThrottle
 
 User = get_user_model()
 
@@ -20,6 +21,7 @@ User = get_user_model()
 class AgentLoginView(APIView):
     """Authenticate an agent and return JWT token"""
     permission_classes = [permissions.AllowAny]  # No auth required for login
+    throttle_classes = [AuthRateThrottle]
     
     def post(self, request):
         serializer = AgentLoginSerializer(data=request.data)
@@ -99,6 +101,7 @@ class AgentLogoutView(APIView):
 class UserRegisterView(APIView):
     """Register a new human user and return simplejwt tokens."""
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [AuthRateThrottle]
 
     def post(self, request):
         data = request.data

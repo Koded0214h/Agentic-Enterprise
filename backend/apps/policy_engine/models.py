@@ -41,6 +41,22 @@ class PolicyResource(models.TextChoices):
     DATA_DELETE = "data:delete", _("Delete Data")
 
 
+class Workspace(models.Model):
+    """Lightweight workspace model for multi-tenant policy scoping."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255, unique=True)
+    slug = models.SlugField(max_length=100, unique=True)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='workspaces')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
 class PolicyCondition(models.Model):
     """
     Dynamic conditions for policy evaluation.
@@ -97,6 +113,16 @@ class Policy(models.Model):
         related_name="policies"
     )
     
+    # Workspace scoping (null = global policy)
+    workspace = models.ForeignKey(
+        'policy_engine.Workspace',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='policies',
+        help_text=_("If set, policy applies only to this workspace. Null = global."),
+    )
+
     # Who this policy applies to
     roles = models.ManyToManyField(Role, blank=True, related_name="policies")
     agents = models.ManyToManyField(Agent, blank=True, related_name="policies")
