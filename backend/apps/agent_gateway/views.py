@@ -1,45 +1,106 @@
 import uuid
+import base64
+import secrets
+import string
 from datetime import timedelta
+
 from django.utils import timezone
 from django.contrib.auth import get_user_model
+from django.utils.text import slugify
+from django.conf import settings
+
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from django.conf import settings
+from rest_framework_simplejwt.tokens import RefreshToken
+
 import jwt
+
 from apps.agent_registry.models import Agent
-from .models import AgentSession, AgentRequestLog
+from .models import (
+    AgentSession,
+    AgentRequestLog,
+    PasswordResetToken,
+    Workspace,
+    WorkspaceMembership,
+    WorkspaceInvitation,
+    LLMProviderConfig,
+    WaitlistEntry,
+    BetaInviteCode,
+    BetaTesterProfile,
+    FeedbackEntry,
+)
 from .serializers import AgentLoginSerializer, AgentSessionSerializer
 from .authentication import AgentAuthentication
 
 User = get_user_model()
 
 
+# ──────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────
+
+def _fernet_key():
+    """Derive a 32-byte URL-safe base64 Fernet key from Django's SECRET_KEY."""
+    raw = settings.SECRET_KEY[:32].encode().ljust(32, b'0')
+    return base64.urlsafe_b64encode(raw)
+
+
+def _encrypt(plaintext: str) -> str:
+    from cryptography.fernet import Fernet
+    f = Fernet(_fernet_key())
+    return f.encrypt(plaintext.encode()).decode()
+
+
+def _decrypt(ciphertext: str) -> str:
+    from cryptography.fernet import Fernet
+    f = Fernet(_fernet_key())
+    return f.decrypt(ciphertext.encode()).decode()
+
+
+def _generate_reset_token(length=6) -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+
+def _unique_slug(base: str) -> str:
+    slug = slugify(base)
+    candidate = slug
+    counter = 1
+    while Workspace.objects.filter(slug=candidate).exists():
+        candidate = f"{slug}-{counter}"
+        counter += 1
+    return candidate
+
+
+# ──────────────────────────────────────────────
+# Existing agent views (unchanged)
+# ──────────────────────────────────────────────
+
 class AgentLoginView(APIView):
     """Authenticate an agent and return JWT token"""
-    permission_classes = [permissions.AllowAny]  # No auth required for login
-    
+    permission_classes = [permissions.AllowAny]
+
     def post(self, request):
         serializer = AgentLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         agent_id = serializer.validated_data['agent_id']
         identity_key = serializer.validated_data['identity_key']
-        
+
         try:
             agent = Agent.objects.get(id=agent_id, identity_key=identity_key)
         except Agent.DoesNotExist:
             return Response(
-                {'error': 'Invalid credentials'}, 
-                status=status.HTTP_401_UNAUTHORIZED
+                {'error': 'Invalid credentials'},
+                status=status.HTTP_401_UNAUTHORIZED,
             )
-        
-        # Generate JWT for agent
+
         jti = str(uuid.uuid4())
         expires_at = timezone.now() + timedelta(hours=1)
-        
+
         payload = {
             'agent_id': str(agent.id),
             'jti': jti,
@@ -48,10 +109,9 @@ class AgentLoginView(APIView):
             'token_type': 'access',
             'type': 'agent',
         }
-        
+
         token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
-        
-        # Create session
+
         session = AgentSession.objects.create(
             agent=agent,
             jti=jti,
@@ -59,7 +119,7 @@ class AgentLoginView(APIView):
             ip_address=request.META.get('REMOTE_ADDR'),
             user_agent=request.META.get('HTTP_USER_AGENT', ''),
         )
-        
+
         return Response({
             'access_token': token,
             'token_type': 'Bearer',
@@ -72,29 +132,52 @@ class AgentLoginView(APIView):
 class AgentLogoutView(APIView):
     """Revoke agent session"""
     authentication_classes = [AgentAuthentication]
-    
+
     def post(self, request):
         auth_header = request.headers.get('Authorization')
         token = auth_header.split()[1]
-        
+
         try:
-            payload = jwt.decode(
-                token, 
-                settings.SECRET_KEY, 
-                algorithms=['HS256']
-            )
-            
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
             session = AgentSession.objects.get(jti=payload['jti'])
             session.revoked_at = timezone.now()
             session.save()
-            
             return Response({'message': 'Successfully logged out'})
         except (jwt.InvalidTokenError, AgentSession.DoesNotExist):
             return Response(
                 {'error': 'Invalid token'},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
+
+# ──────────────────────────────────────────────
+# Task 7 helper – beta invite validation
+# ──────────────────────────────────────────────
+
+def _validate_invite_code(code: str):
+    """
+    Returns (BetaInviteCode, None) on success or (None, error_str) on failure.
+    """
+    try:
+        obj = BetaInviteCode.objects.get(code=code)
+    except BetaInviteCode.DoesNotExist:
+        return None, 'Invalid invite code.'
+
+    if not obj.is_active:
+        return None, 'Invite code is no longer active.'
+
+    if obj.expires_at and obj.expires_at < timezone.now():
+        return None, 'Invite code has expired.'
+
+    if obj.use_count >= obj.max_uses:
+        return None, 'Invite code has reached its maximum uses.'
+
+    return obj, None
+
+
+# ──────────────────────────────────────────────
+# Task 1 + 7 – User registration (updated)
+# ──────────────────────────────────────────────
 
 class UserRegisterView(APIView):
     """Register a new human user and return simplejwt tokens."""
@@ -107,15 +190,32 @@ class UserRegisterView(APIView):
         username = data.get('username', email)
         first_name = data.get('first_name', '')
         last_name = data.get('last_name', '')
+        invite_code_str = data.get('invite_code', '').strip()
 
         if not email or not password:
-            return Response({'detail': 'Email and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'detail': 'Email and password are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if User.objects.filter(email=email).exists():
-            return Response({'email': ['A user with that email already exists.']}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'email': ['A user with that email already exists.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if len(password) < 8:
-            return Response({'password': ['Password must be at least 8 characters.']}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'password': ['Password must be at least 8 characters.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate invite code before creating user
+        invite_obj = None
+        if invite_code_str:
+            invite_obj, err = _validate_invite_code(invite_code_str)
+            if err:
+                return Response({'invite_code': [err]}, status=status.HTTP_400_BAD_REQUEST)
 
         user = User.objects.create_user(
             username=username,
@@ -125,8 +225,11 @@ class UserRegisterView(APIView):
             last_name=last_name,
         )
 
-        # Return simplejwt tokens so the frontend can log in immediately
-        from rest_framework_simplejwt.tokens import RefreshToken
+        if invite_obj:
+            BetaTesterProfile.objects.create(user=user, invite_code_used=invite_obj)
+            invite_obj.use_count += 1
+            invite_obj.save(update_fields=['use_count'])
+
         refresh = RefreshToken.for_user(user)
         return Response({
             'access': str(refresh.access_token),
@@ -140,8 +243,12 @@ class UserRegisterView(APIView):
         }, status=status.HTTP_201_CREATED)
 
 
+# ──────────────────────────────────────────────
+# Task 3 – User profile (get + patch) + avatar stub
+# ──────────────────────────────────────────────
+
 class UserMeView(APIView):
-    """Return the authenticated user's profile."""
+    """Return or update the authenticated user's profile."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -154,3 +261,452 @@ class UserMeView(APIView):
             'last_name': user.last_name,
             'is_staff': user.is_staff,
         })
+
+    def patch(self, request):
+        user = request.user
+        allowed = ('first_name', 'last_name', 'username')
+        updated = []
+        for field in allowed:
+            if field in request.data:
+                setattr(user, field, request.data[field])
+                updated.append(field)
+        if updated:
+            user.save(update_fields=updated)
+        return Response({
+            'id': user.id,
+            'email': user.email,
+            'username': user.username,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'is_staff': user.is_staff,
+        })
+
+
+class UserAvatarView(APIView):
+    """Stub – avatar upload not yet supported."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        return Response(
+            {'detail': 'Avatar upload not yet supported'},
+            status=status.HTTP_200_OK,
+        )
+
+
+# ──────────────────────────────────────────────
+# Task 1 – Password Reset
+# ──────────────────────────────────────────────
+
+class PasswordResetRequestView(APIView):
+    """POST /auth/password-reset/ — send a reset token."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        # Always return the same response regardless of whether email exists
+        generic_response = Response(
+            {'detail': 'If that email exists, a reset link was sent.'},
+            status=status.HTTP_200_OK,
+        )
+
+        if not email:
+            return generic_response
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return generic_response
+
+        token_str = _generate_reset_token(6)
+        expires_at = timezone.now() + timedelta(hours=1)
+
+        PasswordResetToken.objects.create(
+            user=user,
+            token=token_str,
+            expires_at=expires_at,
+        )
+
+        # Mock email — print to stdout until an email service is wired up
+        print(f"[PASSWORD RESET] User: {email}  Token: {token_str}  Expires: {expires_at}")
+
+        return generic_response
+
+
+class PasswordResetConfirmView(APIView):
+    """POST /auth/password-reset/confirm/ — validate token and set new password."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        token_str = request.data.get('token', '').strip()
+        new_password = request.data.get('new_password', '')
+
+        if not token_str or not new_password:
+            return Response(
+                {'detail': 'token and new_password are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if len(new_password) < 8:
+            return Response(
+                {'new_password': ['Password must be at least 8 characters.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            reset_token = PasswordResetToken.objects.select_related('user').get(token=token_str)
+        except PasswordResetToken.DoesNotExist:
+            return Response({'detail': 'Invalid or expired token.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if reset_token.used:
+            return Response({'detail': 'Token has already been used.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if reset_token.expires_at < timezone.now():
+            return Response({'detail': 'Token has expired.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = reset_token.user
+        user.set_password(new_password)
+        user.save()
+
+        reset_token.used = True
+        reset_token.save(update_fields=['used'])
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+        })
+
+
+# ──────────────────────────────────────────────
+# Task 4 – Workspace
+# ──────────────────────────────────────────────
+
+class WorkspaceViewSet(viewsets.ModelViewSet):
+    """CRUD for workspaces — filtered to workspaces the user is a member of."""
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'post', 'patch', 'put', 'head', 'options']
+
+    def get_queryset(self):
+        return Workspace.objects.filter(members=self.request.user, is_active=True)
+
+    def get_serializer_class(self):
+        # Inline serializer to avoid a separate serializers file for now
+        from rest_framework import serializers as drf_serializers
+
+        class WorkspaceSerializer(drf_serializers.ModelSerializer):
+            class Meta:
+                model = Workspace
+                fields = [
+                    'id', 'name', 'slug', 'owner', 'plan',
+                    'token_budget_monthly', 'created_at', 'is_active',
+                ]
+                read_only_fields = ['id', 'slug', 'owner', 'created_at']
+
+        return WorkspaceSerializer
+
+    def perform_create(self, serializer):
+        name = serializer.validated_data.get('name', '')
+        slug = _unique_slug(name)
+        workspace = serializer.save(owner=self.request.user, slug=slug)
+        # Auto-add creator as owner member
+        WorkspaceMembership.objects.create(
+            workspace=workspace,
+            user=self.request.user,
+            role='owner',
+            invited_by=None,
+        )
+
+
+class WorkspaceInviteView(APIView):
+    """POST /workspaces/<workspace_id>/invite/ — create an invitation."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, workspace_id):
+        try:
+            workspace = Workspace.objects.get(id=workspace_id)
+        except Workspace.DoesNotExist:
+            return Response({'detail': 'Workspace not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Only owners/admins may invite
+        try:
+            membership = WorkspaceMembership.objects.get(workspace=workspace, user=request.user)
+        except WorkspaceMembership.DoesNotExist:
+            return Response({'detail': 'You are not a member of this workspace.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if membership.role not in ('owner', 'admin'):
+            return Response({'detail': 'Only owners and admins can invite members.'}, status=status.HTTP_403_FORBIDDEN)
+
+        email = request.data.get('email', '').strip().lower()
+        role = request.data.get('role', 'member')
+
+        if not email:
+            return Response({'detail': 'email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        token_str = secrets.token_urlsafe(48)
+        expires_at = timezone.now() + timedelta(days=7)
+
+        invitation = WorkspaceInvitation.objects.create(
+            workspace=workspace,
+            email=email,
+            role=role,
+            token=token_str,
+            invited_by=request.user,
+            expires_at=expires_at,
+        )
+
+        invite_url = f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/accept-invite?token={token_str}"
+        print(f"[WORKSPACE INVITE] {email} invited to '{workspace.name}' as {role}. URL: {invite_url}")
+
+        return Response({
+            'detail': 'Invitation created.',
+            'invitation_id': str(invitation.id),
+            'expires_at': invitation.expires_at,
+        }, status=status.HTTP_201_CREATED)
+
+
+class WorkspaceAcceptInviteView(APIView):
+    """POST /workspaces/accept-invite/ — accept a workspace invitation."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        token_str = request.data.get('token', '').strip()
+        if not token_str:
+            return Response({'detail': 'token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            invitation = WorkspaceInvitation.objects.select_related('workspace').get(token=token_str)
+        except WorkspaceInvitation.DoesNotExist:
+            return Response({'detail': 'Invalid or expired invitation token.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if invitation.accepted:
+            return Response({'detail': 'Invitation has already been accepted.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if invitation.expires_at < timezone.now():
+            return Response({'detail': 'Invitation has expired.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        workspace = invitation.workspace
+
+        # Idempotent — skip if already a member
+        membership, created = WorkspaceMembership.objects.get_or_create(
+            workspace=workspace,
+            user=request.user,
+            defaults={'role': invitation.role, 'invited_by': invitation.invited_by},
+        )
+
+        invitation.accepted = True
+        invitation.save(update_fields=['accepted'])
+
+        return Response({
+            'detail': 'You have joined the workspace.',
+            'workspace': {
+                'id': str(workspace.id),
+                'name': workspace.name,
+                'slug': workspace.slug,
+            },
+            'role': membership.role,
+        })
+
+
+# ──────────────────────────────────────────────
+# Task 5 – LLM Provider Config
+# ──────────────────────────────────────────────
+
+class LLMProviderConfigViewSet(viewsets.ModelViewSet):
+    """CRUD for LLM provider configs — scoped to request.user."""
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return LLMProviderConfig.objects.filter(user=self.request.user)
+
+    def get_serializer_class(self):
+        from rest_framework import serializers as drf_serializers
+
+        class LLMProviderConfigSerializer(drf_serializers.ModelSerializer):
+            api_key = drf_serializers.CharField(write_only=True, required=True, source='api_key_encrypted')
+            api_key_masked = drf_serializers.SerializerMethodField()
+
+            class Meta:
+                model = LLMProviderConfig
+                fields = [
+                    'id', 'provider', 'api_key', 'api_key_masked',
+                    'model_preference', 'is_active', 'created_at',
+                ]
+                read_only_fields = ['id', 'created_at', 'api_key_masked']
+
+            def get_api_key_masked(self, obj):
+                return '***'
+
+            def validate_api_key(self, value):
+                # Encrypt before saving
+                return _encrypt(value)
+
+        return LLMProviderConfigSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def test(self, request, pk=None):
+        """Try a minimal API call to validate the stored key."""
+        config = self.get_object()
+
+        try:
+            api_key = _decrypt(config.api_key_encrypted)
+        except Exception:
+            return Response(
+                {'detail': 'Failed to decrypt stored API key.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        result = {'provider': config.provider, 'valid': False, 'detail': ''}
+
+        try:
+            if config.provider == 'openai':
+                import openai
+                client = openai.OpenAI(api_key=api_key)
+                client.models.list()
+                result['valid'] = True
+                result['detail'] = 'OpenAI key is valid.'
+
+            elif config.provider == 'anthropic':
+                import anthropic
+                client = anthropic.Anthropic(api_key=api_key)
+                # Minimal call — list models endpoint
+                client.models.list()
+                result['valid'] = True
+                result['detail'] = 'Anthropic key is valid.'
+
+            elif config.provider == 'gemini':
+                import google.generativeai as genai
+                genai.configure(api_key=api_key)
+                list(genai.list_models())
+                result['valid'] = True
+                result['detail'] = 'Gemini key is valid.'
+
+            elif config.provider == 'mistral':
+                import httpx as _httpx
+                resp = _httpx.get(
+                    'https://api.mistral.ai/v1/models',
+                    headers={'Authorization': f'Bearer {api_key}'},
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    result['valid'] = True
+                    result['detail'] = 'Mistral key is valid.'
+                else:
+                    result['detail'] = f'Mistral returned status {resp.status_code}.'
+
+            else:
+                result['detail'] = f'Test not implemented for provider: {config.provider}'
+
+        except Exception as exc:
+            result['detail'] = str(exc)
+
+        return Response(result)
+
+
+# ──────────────────────────────────────────────
+# Task 6 – Waitlist
+# ──────────────────────────────────────────────
+
+class WaitlistView(APIView):
+    """POST /auth/waitlist/ — join the waitlist (no auth required)."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        source = request.data.get('source', 'landing')
+        notes = request.data.get('notes', '')
+
+        if not email:
+            return Response({'detail': 'email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        entry, created = WaitlistEntry.objects.get_or_create(
+            email=email,
+            defaults={'source': source, 'notes': notes},
+        )
+
+        if created:
+            return Response({'detail': 'You have been added to the waitlist.'}, status=status.HTTP_201_CREATED)
+        else:
+            return Response({'detail': 'You are already on the waitlist.'}, status=status.HTTP_200_OK)
+
+
+# ──────────────────────────────────────────────
+# Task 7 – Beta Invite & Feedback
+# ──────────────────────────────────────────────
+
+class BetaInviteCodeValidateView(APIView):
+    """POST /auth/invite/validate/ — check whether an invite code is usable."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        code = request.data.get('code', '').strip()
+        if not code:
+            return Response({'detail': 'code is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        invite_obj, err = _validate_invite_code(code)
+        if err:
+            return Response({'valid': False, 'detail': err}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            'valid': True,
+            'detail': 'Invite code is valid.',
+            'uses_remaining': invite_obj.max_uses - invite_obj.use_count,
+        })
+
+
+class FeedbackView(APIView):
+    """POST /auth/feedback/ — submit feedback (auth required)."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        type_ = request.data.get('type', '')
+        title = request.data.get('title', '').strip()
+        body = request.data.get('body', '').strip()
+        rating = request.data.get('rating', None)
+        page = request.data.get('page', '')
+
+        valid_types = ('bug', 'feature', 'general')
+        if type_ not in valid_types:
+            return Response(
+                {'type': [f'Must be one of: {", ".join(valid_types)}.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not title or not body:
+            return Response(
+                {'detail': 'title and body are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if rating is not None:
+            try:
+                rating = int(rating)
+            except (TypeError, ValueError):
+                return Response({'rating': ['Must be an integer.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        entry = FeedbackEntry.objects.create(
+            user=request.user,
+            type=type_,
+            title=title,
+            body=body,
+            rating=rating,
+            page=page,
+        )
+
+        # Update beta tester feedback count if applicable
+        try:
+            profile = request.user.beta_profile
+            profile.feedback_count += 1
+            profile.save(update_fields=['feedback_count'])
+        except Exception:
+            pass
+
+        return Response({
+            'detail': 'Feedback submitted.',
+            'id': str(entry.id),
+        }, status=status.HTTP_201_CREATED)
