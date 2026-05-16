@@ -15,6 +15,7 @@ class KnowledgeCollection(models.Model):
     
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='knowledge_collections')
     agents = models.ManyToManyField(Agent, blank=True, related_name='knowledge_collections')
+    tags = models.ManyToManyField('MemoryTag', blank=True, related_name='collections')
     
     embedding_model = models.CharField(
         max_length=100,
@@ -115,28 +116,43 @@ class DocumentChunk(models.Model):
 
 class QueryLog(models.Model):
     """Track agent queries and retrieved context"""
-    
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='rag_queries')
     collection = models.ForeignKey(KnowledgeCollection, on_delete=models.CASCADE)
-    
+
     query = models.TextField()
     query_embedding_id = models.CharField(max_length=255, blank=True)
-    
+
     retrieved_chunks = models.JSONField(default=list)
     relevance_scores = models.JSONField(default=list)
-    
+
     response = models.TextField()
     tokens_used = models.IntegerField(default=0)
-    
+
     retrieval_time_ms = models.IntegerField(default=0)
     generation_time_ms = models.IntegerField(default=0)
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     class Meta:
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['agent', 'created_at']),
             models.Index(fields=['collection', 'created_at']),
         ]
+
+
+class MemoryTag(models.Model):
+    """Tags for organizing knowledge collections."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)
+    color = models.CharField(max_length=7, default='#6366f1')
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='memory_tags')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['name', 'owner']
+
+    def __str__(self):
+        return self.name

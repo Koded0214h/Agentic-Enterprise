@@ -6,6 +6,8 @@ export const agents = {
   get: (id) => api.get(`/registry/agents/${id}/`),
   blueprints: () => api.get('/registry/blueprints/'),
   pendingActions: () => api.get('/intelligence/pending-actions/').then(d => Array.isArray(d) ? { results: d, count: d.length } : d),
-  approve: (id) => api.post(`/intelligence/pending-actions/${id}/approve/`),
-  reject: (id) => api.post(`/intelligence/pending-actions/${id}/reject/`),
+  approve: (id, data) => api.post(`/intelligence/pending-actions/${id}/approve/`, data || { decision: 'APPROVED' }),
+  reject: (id, data) => api.post(`/intelligence/pending-actions/${id}/approve/`, data || { decision: 'DENIED' }),
+  escalations: () => api.get('/intelligence/escalations/'),
+  escalate: (action_id, reason) => api.post('/intelligence/escalations/', { action_id, reason }),
 }

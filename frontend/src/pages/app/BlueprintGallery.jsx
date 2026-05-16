@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import {
   RiTimerFlashLine, RiStore2Line, RiBarChart2Line, RiRocketLine,
   RiCustomerService2Line, RiCodeLine, RiArrowRightLine,
+  RiLineChartLine, RiPieChartLine,
 } from 'react-icons/ri'
 import './BlueprintGallery.css'
 
@@ -65,6 +66,26 @@ const BLUEPRINTS = [
     cost: '$1.80',
     tags: ['Data', 'Finance'],
     color: '#f472b6',
+  },
+  {
+    id: 'launch-landing-page',
+    Icon: RiLineChartLine,
+    name: 'Launch Landing Page',
+    agents: 4,
+    desc: 'Generate, design, and deploy a high-converting landing page. Includes copy, SEO, and deployment.',
+    cost: '$0.50',
+    tags: ['Growth', 'Marketing'],
+    color: '#fb923c',
+  },
+  {
+    id: 'setup-analytics-stack',
+    Icon: RiPieChartLine,
+    name: 'Setup Analytics Stack',
+    agents: 3,
+    desc: 'Configure product analytics, user tracking, funnel analysis, and dashboards for data-driven decisions.',
+    cost: '$0.40',
+    tags: ['Engineering', 'Data'],
+    color: '#818cf8',
   },
 ]
 

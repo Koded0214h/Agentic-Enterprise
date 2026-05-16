@@ -36,7 +36,9 @@ class UsageRecord(models.Model):
     # Context
     resource_id = models.UUIDField(null=True, blank=True)  # e.g. Conversation ID or Task ID
     resource_type = models.CharField(max_length=50, blank=True)
-    
+    workflow_id = models.UUIDField(null=True, blank=True, db_index=True)
+    workflow_name = models.CharField(max_length=255, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

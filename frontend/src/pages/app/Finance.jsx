@@ -1,16 +1,19 @@
 import { useState, useEffect } from 'react'
 import {
   RiWalletLine, RiBarChartLine, RiPieChartLine, RiTrophyLine,
-  RiArrowUpLine, RiEditLine,
+  RiArrowUpLine, RiEditLine, RiHistoryLine, RiBarChart2Line, RiAlertLine,
 } from 'react-icons/ri'
 import { finance } from '../../api/finance'
 import './Finance.css'
 
 const TABS = [
-  { id: 'overview',     label: 'Overview',    Icon: RiWalletLine },
-  { id: 'budgets',      label: 'Budgets',     Icon: RiBarChartLine },
-  { id: 'attribution',  label: 'Attribution', Icon: RiPieChartLine },
-  { id: 'roi',          label: 'ROI',         Icon: RiTrophyLine },
+  { id: 'overview',     label: 'Overview',       Icon: RiWalletLine },
+  { id: 'budgets',      label: 'Budgets',        Icon: RiBarChartLine },
+  { id: 'attribution',  label: 'Attribution',    Icon: RiPieChartLine },
+  { id: 'roi',          label: 'ROI',            Icon: RiTrophyLine },
+  { id: 'history',      label: 'History',        Icon: RiHistoryLine },
+  { id: 'workflows',    label: 'Workflow Costs',  Icon: RiBarChart2Line },
+  { id: 'alerts',       label: 'Usage Alerts',   Icon: RiAlertLine },
 ]
 
 export default function Finance() {
@@ -42,6 +45,9 @@ export default function Finance() {
       {tab === 'budgets'     && <Budgets />}
       {tab === 'attribution' && <Attribution />}
       {tab === 'roi'         && <ROI />}
+      {tab === 'history'     && <BillingHistory />}
+      {tab === 'workflows'   && <WorkflowCosts />}
+      {tab === 'alerts'      && <UsageAlerts />}
     </div>
   )
 }
@@ -366,6 +372,232 @@ function ROI() {
             )}
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function BillingHistory() {
+  const [records, setRecords] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [days, setDays] = useState(30)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalCost, setTotalCost] = useState(0)
+
+  useEffect(() => {
+    setLoading(true)
+    finance.history(days, page)
+      .then(d => {
+        setRecords(d.results || [])
+        setTotalPages(d.total_pages || 1)
+        setTotalCost(parseFloat(d.total_cost || 0))
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [days, page])
+
+  const handleDays = (d) => { setDays(d); setPage(1) }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center' }}>
+        <span style={{ fontSize: 12, color: 'var(--text)', marginRight: 4 }}>Period:</span>
+        {[7, 30, 90].map(d => (
+          <button
+            key={d}
+            className={`btn btn-sm ${days === d ? '' : 'btn-ghost'}`}
+            style={days === d ? { background: 'var(--accent)', color: '#fff', border: 'none' } : {}}
+            onClick={() => handleDays(d)}
+          >
+            {d}d
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <FinEmpty icon={<RiHistoryLine size={28} />} text="Loading history…" />
+      ) : records.length === 0 ? (
+        <FinEmpty icon={<RiHistoryLine size={28} />} text="No billing records for this period." />
+      ) : (
+        <div className="card" style={{ padding: 0 }}>
+          <div className="fin-history-summary">
+            <span>{records.length} records shown</span>
+            <span>Period total: <strong>${totalCost.toFixed(4)}</strong></span>
+          </div>
+          <table className="fin-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Agent</th>
+                <th>Type</th>
+                <th>Workflow</th>
+                <th>Tokens In</th>
+                <th>Tokens Out</th>
+                <th>Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.map(r => (
+                <tr key={r.id}>
+                  <td><span className="fin-mono">{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</span></td>
+                  <td><span className="fin-name">{r.agent_name || '—'}</span></td>
+                  <td><span className="fin-mono">{r.resource_type || '—'}</span></td>
+                  <td><span style={{ color: 'var(--text-2)', fontSize: 12 }}>{r.workflow_name || '—'}</span></td>
+                  <td><span className="fin-mono">{(r.tokens_input || 0).toLocaleString()}</span></td>
+                  <td><span className="fin-mono">{(r.tokens_output || 0).toLocaleString()}</span></td>
+                  <td><span className="fin-mono" style={{ color: 'var(--text-h)', fontWeight: 600 }}>${parseFloat(r.cost || 0).toFixed(4)}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {totalPages > 1 && (
+            <div className="fin-pagination">
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                ← Prev
+              </button>
+              <span style={{ fontSize: 12, color: 'var(--text)' }}>Page {page} of {totalPages}</span>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+              >
+                Next →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function WorkflowCosts() {
+  const [workflows, setWorkflows] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    finance.workflowCosts()
+      .then(setWorkflows)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const maxCost = workflows[0] ? parseFloat(workflows[0].total_cost || 0) : 1
+
+  if (loading) return <FinEmpty icon={<RiBarChart2Line size={28} />} text="Loading workflow costs…" />
+
+  return (
+    <div>
+      {workflows.length === 0 ? (
+        <FinEmpty icon={<RiBarChart2Line size={28} />} text="No workflow cost data yet. Run workflows to see cost breakdowns." />
+      ) : (
+        <div className="card" style={{ padding: 0 }}>
+          <table className="fin-table">
+            <thead>
+              <tr>
+                <th>Workflow Name</th>
+                <th>Records</th>
+                <th>Tokens In</th>
+                <th>Tokens Out</th>
+                <th>Total Cost</th>
+                <th style={{ width: 160 }}>Relative Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {workflows.map(w => {
+                const cost = parseFloat(w.total_cost || 0)
+                const pct = maxCost > 0 ? (cost / maxCost) * 100 : 0
+                return (
+                  <tr key={w.workflow_id}>
+                    <td><span className="fin-name">{w.workflow_name || w.workflow_id || '—'}</span></td>
+                    <td><span className="fin-mono">{(w.record_count || 0).toLocaleString()}</span></td>
+                    <td><span className="fin-mono">{(w.total_tokens_input || 0).toLocaleString()}</span></td>
+                    <td><span className="fin-mono">{(w.total_tokens_output || 0).toLocaleString()}</span></td>
+                    <td><span className="fin-mono" style={{ color: 'var(--text-h)', fontWeight: 600 }}>${cost.toFixed(4)}</span></td>
+                    <td>
+                      <div className="fin-bar-track">
+                        <div className="fin-bar-fill" style={{ width: `${pct}%`, background: 'var(--accent)' }} />
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function UsageAlerts() {
+  const [alerts, setAlerts] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    finance.alerts()
+      .then(setAlerts)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <FinEmpty icon={<RiAlertLine size={28} />} text="Loading alerts…" />
+
+  if (alerts.length === 0) {
+    return (
+      <div className="fin-empty">
+        <div className="fin-empty-icon" style={{ opacity: 1 }}>
+          <RiAlertLine size={28} color="var(--green)" />
+        </div>
+        <p style={{ color: 'var(--green)', fontWeight: 600 }}>All budgets within limits</p>
+        <p style={{ color: 'var(--text)', marginTop: -6 }}>No usage alerts at this time.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 14 }}>
+        {alerts.length} active {alerts.length === 1 ? 'alert' : 'alerts'}
+      </div>
+      <div className="fin-alerts-grid">
+        {alerts.map(a => {
+          const pct = parseFloat(a.percentage_used || 0)
+          const isCritical = a.severity === 'critical' || pct >= 100
+          const isWarning = !isCritical && (a.severity === 'warning' || pct >= (a.threshold || 80))
+          const barColor = isCritical ? 'var(--red)' : isWarning ? 'var(--amber)' : 'var(--green)'
+          const badgeClass = isCritical ? 'badge-red' : isWarning ? 'badge-amber' : 'badge-green'
+          const badgeLabel = isCritical ? 'Critical' : isWarning ? 'Warning' : 'OK'
+          return (
+            <div key={a.agent_id} className="card fin-alert-card">
+              <div className="fin-alert-head">
+                <span className="fin-alert-name">{a.agent_name || a.agent_id || '—'}</span>
+                <span className={`badge ${badgeClass}`}>{badgeLabel}</span>
+              </div>
+              <div className="fin-alert-stats">
+                <span className="fin-mono" style={{ color: 'var(--text-2)', fontSize: 11 }}>
+                  ${parseFloat(a.current_spend || 0).toFixed(2)} of ${parseFloat(a.monthly_limit || 0).toFixed(2)}
+                </span>
+                <span className="fin-mono" style={{ color: barColor, fontWeight: 700, fontSize: 13 }}>
+                  {pct.toFixed(1)}% used
+                </span>
+              </div>
+              <div className="fin-bar-track">
+                <div className="fin-bar-fill" style={{ width: `${Math.min(pct, 100)}%`, background: barColor }} />
+              </div>
+              {a.threshold && (
+                <div style={{ fontSize: 11, color: 'var(--text)', marginTop: 4 }}>
+                  Alert threshold: {a.threshold}%
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )

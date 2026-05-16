@@ -1,11 +1,12 @@
 from rest_framework import serializers
-from .models import KnowledgeCollection, Document, DocumentChunk, QueryLog
+from .models import KnowledgeCollection, Document, DocumentChunk, QueryLog, MemoryTag
 
 
 class KnowledgeCollectionSerializer(serializers.ModelSerializer):
     owner_username = serializers.CharField(source='owner.username', read_only=True)
     document_count = serializers.IntegerField(read_only=True)
-    
+    tags = MemoryTagSerializer(many=True, read_only=True)
+
     class Meta:
         model = KnowledgeCollection
         fields = '__all__'
@@ -46,10 +47,21 @@ class DocumentChunkSerializer(serializers.ModelSerializer):
 class QueryLogSerializer(serializers.ModelSerializer):
     agent_name = serializers.CharField(source='agent.name', read_only=True)
     collection_name = serializers.CharField(source='collection.name', read_only=True)
-    
+
     class Meta:
         model = QueryLog
-        fields = '__all__'
+        fields = [
+            'id', 'agent_name', 'collection_name', 'query',
+            'retrieved_chunks', 'relevance_scores', 'tokens_used',
+            'retrieval_time_ms', 'generation_time_ms', 'response', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class MemoryTagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MemoryTag
+        fields = ['id', 'name', 'color', 'created_at']
         read_only_fields = ['id', 'created_at']
 
 

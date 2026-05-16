@@ -2,7 +2,7 @@ import { useParams, Link } from 'react-router-dom'
 import {
   RiArrowLeftLine, RiRocketLine, RiTimerFlashLine, RiBarChart2Line,
   RiCustomerService2Line, RiStore2Line, RiCodeLine, RiRobot2Line,
-  RiShieldCheckLine, RiCoinLine,
+  RiShieldCheckLine, RiCoinLine, RiLineChartLine, RiPieChartLine,
 } from 'react-icons/ri'
 import './BlueprintDetail.css'
 
@@ -42,6 +42,37 @@ const BLUEPRINTS = {
     policies: ['Global Allow', 'CMS Write Access', 'Social Rate Limit'],
     color: '#3dffa0',
     tags: ['Content', 'Growth'],
+  },
+  'launch-landing-page': {
+    Icon: RiLineChartLine,
+    name: 'Launch Landing Page',
+    desc: 'Generate, design, and deploy a high-converting landing page for your startup. Covers brand research, copy, SEO, HTML/CSS generation, and deployment — end to end.',
+    agents: [
+      { name: 'Marketing Agent', role: 'Research target audience and generate compelling value proposition' },
+      { name: 'Content Writer', role: 'Write hero, features, testimonials, and CTA sections' },
+      { name: 'SEO Agent', role: 'Keyword research and meta tag generation' },
+      { name: 'Frontend Engineer', role: 'Generate responsive landing page HTML/CSS' },
+      { name: 'DevOps Agent', role: 'Deploy to hosting platform and verify live URL' },
+    ],
+    cost: '$0.50',
+    policies: ['Global Allow', 'External Deploy Gate', 'SEO Write Access'],
+    color: '#fb923c',
+    tags: ['Growth', 'Marketing'],
+  },
+  'setup-analytics-stack': {
+    Icon: RiPieChartLine,
+    name: 'Setup Analytics Stack',
+    desc: 'Configure product analytics, user tracking, funnel analysis, and dashboards so your team can make data-driven decisions from day one.',
+    agents: [
+      { name: 'Product Agent', role: 'Define KPIs, events to track, and funnel stages' },
+      { name: 'Frontend Engineer', role: 'Generate tracking code for PostHog, Mixpanel, or GA4' },
+      { name: 'DevOps Agent', role: 'Configure dashboards and set up alerts' },
+      { name: 'Documentation Agent', role: 'Document all tracked events and metrics' },
+    ],
+    cost: '$0.40',
+    policies: ['Global Allow', 'Analytics Write Access'],
+    color: '#818cf8',
+    tags: ['Engineering', 'Data'],
   },
 }
 

@@ -155,7 +155,57 @@
 .fin-empty-icon { opacity: 0.3; }
 .fin-empty p { font-size: 13px; max-width: 300px; line-height: 1.5; }
 
+/* Billing History */
+.fin-history-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.fin-history-summary strong { color: var(--text-h); font-family: var(--mono); }
+
+.fin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* Usage Alerts */
+.fin-alerts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.fin-alert-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
+.fin-alert-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.fin-alert-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+.fin-alert-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 @media (max-width: 900px) {
   .fin-kpis { grid-template-columns: 1fr 1fr; }
   .fin-roi-grid { grid-template-columns: 1fr; }
+  .fin-alerts-grid { grid-template-columns: 1fr; }
 }

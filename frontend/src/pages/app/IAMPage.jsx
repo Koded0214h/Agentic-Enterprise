@@ -5,6 +5,7 @@ import {
   RiAddLine, RiShieldCheckLine,
 } from 'react-icons/ri'
 import { agents as agentsAPI } from '../../api/agents'
+import { api } from '../../api/client'
 import './IAMPage.css'
 
 const TABS = [
@@ -12,6 +13,7 @@ const TABS = [
   { id: 'environments', label: 'Environments',   Icon: RiServerLine },
   { id: 'members',      label: 'Members',        Icon: RiTeamLine },
   { id: 'api-keys',     label: 'API Keys',       Icon: RiKeyLine },
+  { id: 'policies',     label: 'Policy Tester',  Icon: RiShieldCheckLine },
 ]
 
 export default function IAMPage() {
@@ -43,6 +45,7 @@ export default function IAMPage() {
       {tab === 'environments' && <Environments />}
       {tab === 'members'      && <Members />}
       {tab === 'api-keys'     && <APIKeys />}
+      {tab === 'policies'     && <PolicyTester />}
     </div>
   )
 }
@@ -340,6 +343,236 @@ function APIKeys() {
         {keys.length === 0 ? (
           <IAMEmpty icon={<RiKeyLine size={28} />} text="No API keys yet. Create one to integrate AOS into CI/CD, scripts, or external tools." />
         ) : null}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Policy Tester
+// ---------------------------------------------------------------------------
+
+const DECISION_COLORS = {
+  ALLOW:    { bg: 'rgba(61,255,160,0.12)', color: 'var(--green)',  label: 'ALLOW' },
+  DENY:     { bg: 'rgba(255,92,122,0.12)', color: 'var(--red)',    label: 'DENY' },
+  AUDIT:    { bg: 'rgba(80,140,255,0.12)', color: '#508cff',       label: 'AUDIT' },
+  ESCALATE: { bg: 'rgba(255,186,0,0.12)',  color: 'var(--amber)',  label: 'ESCALATE' },
+}
+
+function DecisionBadge({ decision }) {
+  if (!decision) return null
+  const cfg = DECISION_COLORS[decision] || { bg: 'var(--bg-3)', color: 'var(--text-2)', label: decision }
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
+      letterSpacing: '0.07em', textTransform: 'uppercase',
+      background: cfg.bg, color: cfg.color,
+    }}>
+      {decision === 'ALLOW' && <RiCheckLine size={11} />}
+      {decision === 'DENY'  && <RiCloseLine size={11} />}
+      {decision === 'ESCALATE' && <RiShieldCheckLine size={11} />}
+      {decision === 'AUDIT' && <RiCheckLine size={11} />}
+      {cfg.label}
+    </span>
+  )
+}
+
+function PolicyTestForm({ endpoint, agentList, title, subtitle }) {
+  const [agentId,  setAgentId]  = useState('')
+  const [resource, setResource] = useState('agent:execute')
+  const [action,   setAction]   = useState('write')
+  const [ctx,      setCtx]      = useState('{}')
+  const [running,  setRunning]  = useState(false)
+  const [result,   setResult]   = useState(null)
+  const [err,      setErr]      = useState(null)
+
+  async function run() {
+    setRunning(true)
+    setResult(null)
+    setErr(null)
+    let context = {}
+    try { context = JSON.parse(ctx || '{}') } catch { setErr('Context must be valid JSON'); setRunning(false); return }
+    try {
+      const data = await api.post(endpoint, { agent_id: agentId, resource, action, context })
+      setResult(data)
+    } catch (e) {
+      setErr(e.message || 'Request failed')
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {title && (
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-h)', marginBottom: 3 }}>{title}</div>
+          {subtitle && <div style={{ fontSize: 12, color: 'var(--text)' }}>{subtitle}</div>}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text)' }}>Agent</span>
+          <select
+            value={agentId}
+            onChange={e => setAgentId(e.target.value)}
+            style={{ background: 'var(--bg-3)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', padding: '8px 10px', color: 'var(--text-h)', fontSize: 12, outline: 'none', fontFamily: 'var(--sans)' }}
+          >
+            <option value="">Select agent…</option>
+            {agentList.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </label>
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text)' }}>Resource</span>
+          <input
+            value={resource}
+            onChange={e => setResource(e.target.value)}
+            placeholder="agent:execute"
+            style={{ background: 'var(--bg-3)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', padding: '8px 10px', color: 'var(--text-h)', fontSize: 12, outline: 'none', fontFamily: 'var(--sans)' }}
+          />
+        </label>
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text)' }}>Action</span>
+          <input
+            value={action}
+            onChange={e => setAction(e.target.value)}
+            placeholder="write"
+            style={{ background: 'var(--bg-3)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', padding: '8px 10px', color: 'var(--text-h)', fontSize: 12, outline: 'none', fontFamily: 'var(--sans)' }}
+          />
+        </label>
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text)' }}>Context (JSON)</span>
+          <textarea
+            value={ctx}
+            onChange={e => setCtx(e.target.value)}
+            placeholder='{"cost": 0.5}'
+            rows={2}
+            style={{ background: 'var(--bg-3)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', padding: '8px 10px', color: 'var(--text-h)', fontSize: 12, outline: 'none', fontFamily: 'var(--mono)', resize: 'vertical' }}
+          />
+        </label>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          className="btn btn-sm"
+          style={{ background: 'var(--accent)', color: '#fff', border: 'none', fontSize: 12, minWidth: 90 }}
+          onClick={run}
+          disabled={running || !agentId}
+        >
+          {running ? 'Running…' : 'Run test'}
+        </button>
+      </div>
+
+      {err && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--red)', background: 'rgba(255,92,122,0.08)', borderRadius: 'var(--radius)', padding: '8px 12px' }}>
+          <RiCloseLine size={13} /> {err}
+        </div>
+      )}
+
+      {result && (
+        <div style={{ background: 'var(--bg-3)', border: '1px solid var(--border-2)', borderRadius: 'var(--radius)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <DecisionBadge decision={result.decision} />
+            {result.policy_name && (
+              <span style={{ fontSize: 11, color: 'var(--text)' }}>matched: <strong style={{ color: 'var(--text-2)' }}>{result.policy_name}</strong></span>
+            )}
+          </div>
+          {result.reason && (
+            <div style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.5, fontFamily: 'var(--mono)', background: 'var(--bg-2)', borderRadius: 4, padding: '6px 10px' }}>{result.reason}</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PolicyRow({ policy, agentList }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', marginBottom: 8 }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--bg-2)', cursor: 'pointer' }}
+        onClick={() => setOpen(v => !v)}
+      >
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-h)' }}>{policy.name}</div>
+          {policy.description && <div style={{ fontSize: 11, color: 'var(--text)', marginTop: 2 }}>{policy.description}</div>}
+        </div>
+        <span className={`badge badge-${policy.effect === 'ALLOW' ? 'green' : policy.effect === 'DENY' ? 'red' : 'amber'}`}>{policy.effect}</span>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={e => { e.stopPropagation(); setOpen(v => !v) }}
+          style={{ fontSize: 11 }}
+        >
+          {open ? 'Close' : 'Test'}
+        </button>
+      </div>
+      {open && (
+        <div style={{ padding: 14, background: 'var(--bg)' }}>
+          <PolicyTestForm
+            endpoint={`/policies/policies/${policy.id}/evaluate/`}
+            agentList={agentList}
+            title="Test this policy"
+            subtitle="Evaluate how this specific policy responds to a sample request."
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PolicyTester() {
+  const [agents,   setAgents]   = useState([])
+  const [policies, setPolicies] = useState([])
+  const [loading,  setLoading]  = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      agentsAPI.list().then(d => Array.isArray(d) ? d : (d.results || [])),
+      api.get('/policies/policies/').then(d => Array.isArray(d) ? d : (d.results || [])),
+    ])
+      .then(([a, p]) => { setAgents(a); setPolicies(p) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="iam-empty"><div className="aos-loader" style={{ minHeight: 'unset' }}><span /></div></div>
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Standalone check */}
+      <div>
+        <div style={{ marginBottom: 10 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-h)', marginBottom: 4 }}>Global policy check</h2>
+          <p style={{ fontSize: 12, color: 'var(--text)' }}>
+            Evaluate the full policy stack for an agent. Uses <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>POST /api/v1/policy/check/</code> — returns which policy matched and the final decision.
+          </p>
+        </div>
+        <PolicyTestForm
+          endpoint="/policies/check/"
+          agentList={agents}
+        />
+      </div>
+
+      {/* Per-policy tests */}
+      <div>
+        <div style={{ marginBottom: 10 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-h)', marginBottom: 4 }}>Test individual policies</h2>
+          <p style={{ fontSize: 12, color: 'var(--text)' }}>
+            Click "Test" on any policy below to evaluate that policy in isolation.
+          </p>
+        </div>
+        {policies.length === 0 ? (
+          <IAMEmpty icon={<RiShieldCheckLine size={28} />} text="No policies found. Create policies in the policy engine to test them here." />
+        ) : (
+          policies.map(p => <PolicyRow key={p.id} policy={p} agentList={agents} />)
+        )}
       </div>
     </div>
   )

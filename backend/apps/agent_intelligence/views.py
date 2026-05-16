@@ -2,6 +2,7 @@ import json
 import logging
 import time
 
+from django.db import models as dj_models
 from django.http import StreamingHttpResponse
 from django.utils import timezone
 from rest_framework import viewsets, permissions, status
@@ -408,6 +409,57 @@ class PendingActionViewSet(viewsets.ModelViewSet):
 
 
 # ---------------------------------------------------------------------------
+# Council escalation view
+# ---------------------------------------------------------------------------
+
+class EscalationView(views.APIView):
+    """Escalate a pending action to human review when council cannot decide."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        action_id = request.data.get('action_id')
+        reason = request.data.get('reason', 'Council could not reach consensus')
+
+        try:
+            pending = PendingAction.objects.get(id=action_id, agent__owner=request.user)
+        except PendingAction.DoesNotExist:
+            return Response({'error': 'Action not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if pending.status not in ('PENDING',):
+            return Response({'error': 'Action already decided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        pending.status = 'ESCALATED'
+        pending.reason = f"[ESCALATED] {reason}\n{pending.reason or ''}".strip()
+        pending.save()
+
+        return Response({
+            'status': 'escalated',
+            'action_id': str(pending.id),
+            'reason': reason,
+            'message': 'Action escalated to human review',
+        })
+
+    def get(self, request):
+        escalated = PendingAction.objects.filter(
+            agent__owner=request.user,
+            status='ESCALATED',
+        ).select_related('agent').order_by('-created_at')
+
+        results = [
+            {
+                'id': str(a.id),
+                'agent_name': a.agent.name,
+                'action_type': a.action_type,
+                'description': a.reason,
+                'risk_score': getattr(a, 'risk_score', None),
+                'created_at': a.created_at.isoformat(),
+            }
+            for a in escalated
+        ]
+        return Response({'escalated': results, 'count': len(results)})
+
+
+# ---------------------------------------------------------------------------
 # Direct execution view (one-shot)
 # ---------------------------------------------------------------------------
 
@@ -613,3 +665,220 @@ class AgentStreamView(views.APIView):
         response["Cache-Control"] = "no-cache"
         response["X-Accel-Buffering"] = "no"
         return response
+
+
+# ---------------------------------------------------------------------------
+# Analytics views
+# ---------------------------------------------------------------------------
+
+class ToolAnalyticsView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        days = int(request.query_params.get('days', 30))
+        since = timezone.now() - timezone.timedelta(days=days)
+
+        from django.db.models import Count, Avg
+        # Aggregate tool calls from Message model
+        tool_stats = (
+            Message.objects
+            .filter(created_at__gte=since, tool_name__isnull=False)
+            .exclude(tool_name='')
+            .values('tool_name')
+            .annotate(call_count=Count('id'))
+            .order_by('-call_count')[:20]
+        )
+
+        tools = [
+            {
+                'tool_name': t['tool_name'],
+                'call_count': t['call_count'],
+            }
+            for t in tool_stats
+        ]
+
+        return Response({
+            'tools': tools,
+            'total_calls': sum(t['call_count'] for t in tools),
+            'days': days,
+        })
+
+
+class FailureAnalyticsView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        days = int(request.query_params.get('days', 30))
+        since = timezone.now() - timezone.timedelta(days=days)
+
+        from django.db.models import Count
+        from django.db.models.functions import TruncDate
+
+        failed_qs = Conversation.objects.filter(
+            created_at__gte=since,
+            status__in=['ERROR', 'FAILED', 'TIMEOUT'],
+        )
+
+        # Daily failures
+        daily = (
+            failed_qs
+            .annotate(date=TruncDate('created_at'))
+            .values('date')
+            .annotate(count=Count('id'))
+            .order_by('date')
+        )
+
+        # By agent
+        by_agent = (
+            failed_qs
+            .values('agent__name')
+            .annotate(count=Count('id'))
+            .order_by('-count')[:10]
+        )
+
+        # By status
+        by_status = (
+            failed_qs
+            .values('status')
+            .annotate(count=Count('id'))
+        )
+
+        return Response({
+            'daily_failures': [
+                {'date': str(d['date']), 'count': d['count']} for d in daily
+            ],
+            'failure_by_agent': [
+                {'agent_name': d['agent__name'], 'count': d['count']} for d in by_agent
+            ],
+            'failure_by_status': [
+                {'status': d['status'], 'count': d['count']} for d in by_status
+            ],
+            'total_failures': failed_qs.count(),
+            'days': days,
+        })
+
+
+class TaskFailureAnalyticsView(views.APIView):
+    """WorkflowTask-based failure analytics for the Observe dashboard."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import Count
+
+        failed_by_agent = (
+            WorkflowTask.objects
+            .filter(agent__owner=request.user, status='FAILED')
+            .values('agent__name', 'agent__id')
+            .annotate(count=Count('id'))
+            .order_by('-count')[:10]
+        )
+
+        recent_failures = WorkflowTask.objects.filter(
+            agent__owner=request.user, status='FAILED'
+        ).order_by('-updated_at')[:50]
+
+        error_freq: dict = {}
+        for t in recent_failures:
+            err = (t.output_data or {}).get('error', 'Unknown error')[:80]
+            error_freq[err] = error_freq.get(err, 0) + 1
+
+        top_errors = sorted(error_freq.items(), key=lambda x: x[1], reverse=True)[:10]
+
+        total_tasks = WorkflowTask.objects.filter(agent__owner=request.user).count()
+        total_failed = WorkflowTask.objects.filter(agent__owner=request.user, status='FAILED').count()
+
+        return Response({
+            'total_tasks': total_tasks,
+            'total_failed': total_failed,
+            'failure_rate': round(total_failed / max(total_tasks, 1) * 100, 1),
+            'failed_by_agent': [
+                {'agent_name': r['agent__name'], 'agent_id': str(r['agent__id']), 'count': r['count']}
+                for r in failed_by_agent
+            ],
+            'top_errors': [{'error': e, 'count': c} for e, c in top_errors],
+        })
+
+
+class RetryAnalyticsView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import Count
+
+        blocked = WorkflowTask.objects.filter(agent__owner=request.user, status='BLOCKED').count()
+        failed = WorkflowTask.objects.filter(agent__owner=request.user, status='FAILED').count()
+        completed = WorkflowTask.objects.filter(agent__owner=request.user, status='COMPLETED').count()
+        pending = WorkflowTask.objects.filter(agent__owner=request.user, status='PENDING').count()
+        in_progress = WorkflowTask.objects.filter(agent__owner=request.user, status='IN_PROGRESS').count()
+
+        agent_stats = (
+            WorkflowTask.objects
+            .filter(agent__owner=request.user)
+            .values('agent__name')
+            .annotate(
+                total=Count('id'),
+                failed=Count('id', filter=dj_models.Q(status='FAILED')),
+                completed=Count('id', filter=dj_models.Q(status='COMPLETED')),
+            )
+            .order_by('-total')[:10]
+        )
+
+        return Response({
+            'task_status_breakdown': [
+                {'status': 'COMPLETED', 'count': completed},
+                {'status': 'FAILED', 'count': failed},
+                {'status': 'PENDING', 'count': pending},
+                {'status': 'IN_PROGRESS', 'count': in_progress},
+                {'status': 'BLOCKED', 'count': blocked},
+            ],
+            'agent_performance': [
+                {
+                    'agent_name': r['agent__name'],
+                    'total': r['total'],
+                    'completed': r['completed'],
+                    'failed': r['failed'],
+                    'success_rate': round(r['completed'] / max(r['total'], 1) * 100, 1),
+                }
+                for r in agent_stats
+            ],
+        })
+
+
+class WorkflowGraphView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        tasks = (
+            WorkflowTask.objects
+            .filter(agent__owner=request.user)
+            .prefetch_related('depends_on')
+            .select_related('agent')
+            .order_by('-created_at')[:100]
+        )
+
+        nodes = []
+        edges = []
+        seen: set = set()
+
+        for task in tasks:
+            tid = str(task.id)
+            if tid not in seen:
+                seen.add(tid)
+                nodes.append({
+                    'id': tid,
+                    'label': (task.description or tid)[:40],
+                    'status': task.status,
+                    'agent_name': task.agent.name if task.agent else 'Unknown',
+                })
+            for dep in task.depends_on.all():
+                edges.append({'from': str(dep.id), 'to': tid})
+
+        return Response({'nodes': nodes, 'edges': edges})
+
+
+class ProviderPricingView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from .utils.llm_manager import LLMManager
+        return Response({'pricing': LLMManager.get_provider_pricing()})
