@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
 import {
   RiDashboardLine, RiRobot2Line, RiFlowChart, RiShieldCheckLine,
   RiWalletLine, RiShutDownLine, RiBellLine, RiRocketLine,
   RiLayoutGridLine, RiEyeLine, RiSettings3Line, RiShieldLine,
-  RiTeamLine,
+  RiTeamLine, RiBrainLine, RiArrowRightLine,
 } from 'react-icons/ri'
 import { useAuth } from '../../context/AuthContext'
 import { agents as agentsAPI } from '../../api/agents'
@@ -21,24 +21,26 @@ function buildNav(pendingCount) {
     {
       section: 'Build',
       items: [
-        { to: '/app/blueprints', label: 'Blueprints', Icon: RiLayoutGridLine },
-        { to: '/app/agents', label: 'Agents', Icon: RiRobot2Line },
-        { to: '/app/workflows', label: 'Workflows', Icon: RiFlowChart },
+        { to: '/app/blueprints',  label: 'Blueprints',  Icon: RiLayoutGridLine },
+        { to: '/app/agents',      label: 'Agents',      Icon: RiRobot2Line },
+        { to: '/app/workflows',   label: 'Workflows',   Icon: RiFlowChart },
+        { to: '/app/templates',   label: 'Templates',   Icon: RiLayoutGridLine },
       ],
     },
     {
       section: 'Operate',
       items: [
         { to: '/app/approvals', label: 'Approvals', Icon: RiShieldCheckLine, badge: pendingCount },
-        { to: '/app/observe', label: 'Observe', Icon: RiEyeLine },
-        { to: '/app/finance', label: 'Finance', Icon: RiWalletLine },
+        { to: '/app/observe',   label: 'Observe',   Icon: RiEyeLine },
+        { to: '/app/finance',   label: 'Finance',   Icon: RiWalletLine },
       ],
     },
     {
       section: 'Configure',
       items: [
+        { to: '/app/memory',   label: 'Memory',   Icon: RiBrainLine },
         { to: '/app/policies', label: 'Policies', Icon: RiShieldLine },
-        { to: '/app/iam', label: 'IAM', Icon: RiTeamLine },
+        { to: '/app/iam',      label: 'IAM',      Icon: RiTeamLine },
         { to: '/app/settings', label: 'Settings', Icon: RiSettings3Line },
       ],
     },
@@ -48,8 +50,11 @@ function buildNav(pendingCount) {
 export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
+  const [pendingApprovals, setPendingApprovals] = useState([])
   const [activeCount, setActiveCount] = useState(0)
   const [swarmOpen, setSwarmOpen] = useState(false)
+  const [bellOpen, setBellOpen] = useState(false)
+  const bellRef = useRef(null)
   const { user, logout } = useAuth()
   const location = useLocation()
 
@@ -57,12 +62,25 @@ export default function AppShell() {
     Promise.all([agentsAPI.pendingActions(), agentsAPI.list()])
       .then(([ap, ag]) => {
         const pending = Array.isArray(ap) ? ap : (ap?.results || [])
+        setPendingApprovals(pending.slice(0, 5))
         setPendingCount(pending.length)
         const arr = Array.isArray(ag) ? ag : (ag?.results || [])
         setActiveCount(arr.filter(a => a.status === 'RUNNING').length)
       })
       .catch(() => {})
   }, [location.pathname])
+
+  // Close bell dropdown on outside click
+  useEffect(() => {
+    if (!bellOpen) return
+    function handle(e) {
+      if (bellRef.current && !bellRef.current.contains(e.target)) {
+        setBellOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [bellOpen])
 
   const NAV = buildNav(pendingCount)
 
@@ -130,10 +148,52 @@ export default function AppShell() {
               <span className="dot dot-green dot-pulse" />
               <span>{activeCount} agent{activeCount !== 1 ? 's' : ''} active</span>
             </div>
-            <Link to="/app/approvals" className="shell-bell" aria-label="Approvals">
-              <RiBellLine size={18} />
-              {pendingCount > 0 && <span className="shell-bell-badge">{pendingCount}</span>}
-            </Link>
+            <div className="shell-bell-wrap" ref={bellRef}>
+              <button
+                className="shell-bell"
+                aria-label="Notifications"
+                onClick={() => setBellOpen(v => !v)}
+              >
+                <RiBellLine size={18} />
+                {pendingCount > 0 && <span className="shell-bell-badge">{pendingCount}</span>}
+              </button>
+
+              {bellOpen && (
+                <div className="shell-notif-panel">
+                  <div className="shell-notif-header">
+                    <span>Pending approvals</span>
+                    {pendingCount > 0 && (
+                      <span className="badge badge-amber" style={{ fontSize: 10 }}>{pendingCount}</span>
+                    )}
+                  </div>
+                  {pendingApprovals.length === 0 ? (
+                    <div className="shell-notif-empty">No pending approvals</div>
+                  ) : (
+                    pendingApprovals.map(a => (
+                      <Link
+                        key={a.id}
+                        to={`/app/approvals/${a.id}`}
+                        className="shell-notif-item"
+                        onClick={() => setBellOpen(false)}
+                      >
+                        <div className="shell-notif-item-name">{a.agent || a.agent_name || 'Agent'}</div>
+                        <div className="shell-notif-item-action">{a.action || a.description || 'Needs approval'}</div>
+                        <span className={`badge badge-${{ high: 'red', medium: 'amber', low: 'green' }[a.risk] || 'amber'}`} style={{ fontSize: 10 }}>
+                          {a.risk || 'medium'} risk
+                        </span>
+                      </Link>
+                    ))
+                  )}
+                  <Link
+                    to="/app/approvals"
+                    className="shell-notif-view-all"
+                    onClick={() => setBellOpen(false)}
+                  >
+                    View all approvals <RiArrowRightLine size={12} />
+                  </Link>
+                </div>
+              )}
+            </div>
             <button
               className="shell-run-swarm"
               onClick={() => setSwarmOpen(true)}
