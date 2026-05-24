@@ -20,8 +20,13 @@ const TYPED_GOALS = [
   'Start a growth agency powered by autonomous marketing agents',
 ]
 
-export default function SwarmRunDrawer({ open, onClose }) {
+export default function SwarmRunDrawer({ open, onClose, initialGoal = '' }) {
   const [goal, setGoal] = useState('')
+
+  // Pre-fill goal when opened from a template redirect
+  useEffect(() => {
+    if (open && initialGoal) setGoal(initialGoal)
+  }, [open, initialGoal])
   const [engine, setEngine] = useState('claude')
   const [speed, setSpeed] = useState('sonnet')
   const [loading, setLoading] = useState(false)

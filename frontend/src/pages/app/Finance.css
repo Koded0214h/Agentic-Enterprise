@@ -36,6 +36,19 @@
 .fin-kpi-val { font-size: 28px; font-weight: 800; color: var(--text-h); letter-spacing: -0.04em; line-height: 1; }
 .fin-kpi-sub { font-size: 11px; color: var(--text); }
 
+.fin-mini-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-3);
+}
+.fin-mini-card .fin-kpi-val {
+  font-size: 18px;
+}
+
 /* Budget bar */
 .fin-budget-row {
   display: flex;

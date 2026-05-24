@@ -187,7 +187,7 @@ async def run_graph(graph: TaskGraph, execution_id: str | None = None) -> dict:
             for dep_id, out in upstream.items():
                 txt = (out or {}).get("output", "")
                 if txt:
-                    parts.append(f"### From {dep_id}\n{txt[:1500]}")
+                    parts.append(f"### From {dep_id}\n{txt[:8000]}")
             if parts:
                 context_block = "\n\n## Upstream results\n\n" + "\n\n".join(parts)
 

@@ -452,102 +452,324 @@ class SwarmExecutionContextDetailView(APIView):
         return Response(SwarmExecutionContextSerializer(ctx).data)
 
 
-_ANSI_RE   = re.compile(r'\x1b\[[0-9;]*[mGKHF]')
-_SPINNER_RE = re.compile(r'^[\s⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏▏▎▍▌▋▊▉█▰▱✓✗⠐⠂⠄⠆⠃⠉⠘⠰⠤⠠⡀⢀|/\\-]+\s*')
-
 # agent-swarm lives two levels above backend/
 _SWARM_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "agent-swarm"
 
-# In-memory process store: run_id -> { proc, lines, done, exit_code }
-# Works with Django dev server (single process). Replace with Redis for production.
+# Live run handles only. Durable state lives on SwarmExecutionContext.
 _RUNS: dict = {}
 
-
-def _build_swarm_env():
-    env = os.environ.copy()
-    env_file = _SWARM_ROOT / ".env"
-    if env_file.exists():
-        for raw in env_file.read_text().splitlines():
-            raw = raw.strip()
-            if raw and not raw.startswith("#") and "=" in raw:
-                k, v = raw.split("=", 1)
-                env[k.strip()] = v.strip()
-    # If ANTHROPIC_API_KEY is empty or not a real key, remove it so claude
-    # falls back to OAuth (the user's logged-in session) instead of failing
-    # with "Invalid API key".
-    if not env.get("ANTHROPIC_API_KEY", "").strip().startswith("sk-"):
-        env.pop("ANTHROPIC_API_KEY", None)
-    return env
+_RUN_DONE_STATES = {"completed", "failed", "cancelled", "denied"}
 
 
-def _sys_line(run, msg):
-    """Inject a system/diagnostic line into the run's line buffer."""
-    print(f"[swarm] {msg}", flush=True)
-    run["lines"].append({"type": "line", "content": f"[sys] {msg}"})
+def _run_context_snapshot(ctx: SwarmExecutionContext) -> dict:
+    """Shape a persisted execution context into the run payload used by the UI."""
+    lines = list(ctx.run_lines or [])
+    done = ctx.status in _RUN_DONE_STATES
+    return {
+        "lines": lines,
+        "done": done,
+        "exit_code": ctx.run_exit_code,
+        "goal": ctx.task_summary or "",
+        "engine": ctx.engine,
+        "model": "",
+        "ctx_id": str(ctx.id),
+    }
 
 
-def _stdout_reader(proc, run):
+def _load_run_state(run_id: str) -> dict | None:
+    """Return live in-memory state if available, otherwise hydrate from DB."""
+    run = _RUNS.get(run_id)
+    if run is not None:
+        return run
+    ctx = SwarmExecutionContext.objects.filter(id=run_id).first()
+    if not ctx:
+        return None
+    return _run_context_snapshot(ctx)
+
+
+def _persist_run_state(run_id: str, *, status: str | None = None, exit_code: int | None = None) -> None:
+    """Persist the live native run buffer so stream/poll survive restarts."""
+    run = _RUNS.get(run_id)
+    if not run:
+        return
+    ctx_id = run.get("ctx_id")
+    if not ctx_id:
+        return
+    updates = {
+        "run_lines": run.get("lines", []),
+    }
+    if status is not None:
+        updates["status"] = status
+    if exit_code is not None:
+        updates["run_exit_code"] = exit_code
+    if status in {"completed", "failed", "cancelled", "denied"}:
+        updates["completed_at"] = timezone.now()
     try:
-        _sys_line(run, f"process started — PID {proc.pid}")
-        last_clean = None
-        line_count = 0
-        for raw_line in proc.stdout:
-            segments = raw_line.split("\r")
-            raw = ""
-            for seg in reversed(segments):
-                if seg.strip():
-                    raw = seg
-                    break
-            if not raw:
-                continue
+        SwarmExecutionContext.objects.filter(id=ctx_id).update(**updates)
+    except Exception:
+        # Best-effort durability. The live run still continues if persistence fails.
+        pass
 
-            clean = _ANSI_RE.sub("", raw).rstrip()
-            if not clean:
-                continue
 
-            # Deduplicate spinner frames: strip leading spinner/whitespace before comparing
-            key = _SPINNER_RE.sub("", clean).strip()
-            if key and key == _SPINNER_RE.sub("", last_clean or "").strip():
-                continue
-            last_clean = clean
-            line_count += 1
+def _append_run_line(run_id: str, content: str) -> None:
+    run = _RUNS.get(run_id)
+    if not run:
+        return
+    if run.get("cancelled") and content != "[sys] Run cancelled by user":
+        return
+    if run.get("done"):
+        return
+    run["lines"].append({"type": "line", "content": content})
+    _persist_run_state(run_id, status="running")
 
-            # Don't forward pure spinner lines — only lines with real content
-            if not key:
-                continue
 
-            print(f"[swarm:{proc.pid}] {clean}", flush=True)
-            run["lines"].append({"type": "line", "content": clean})
+def _finish_run(run_id: str, exit_code: int, status: str) -> None:
+    run = _RUNS.get(run_id)
+    if not run:
+        return
+    run["done"] = True
+    run["exit_code"] = exit_code
+    _append = {"type": "done", "exit_code": exit_code}
+    if status == "cancelled":
+        _append["cancelled"] = True
+    run["lines"].append(_append)
+    _persist_run_state(run_id, status=status, exit_code=exit_code)
 
-        proc.wait()
-        _sys_line(run, f"process exited — code {proc.returncode}, {line_count} lines captured")
+
+def _pick_specialist(goal: str) -> tuple[str, str]:
+    """Route a free-form goal to the most appropriate specialist agent."""
+    g = goal.lower()
+    if any(k in g for k in ("frontend", " ui ", "react", "component", "css", "design system")):
+        return "engineering-frontend-developer", "engineering"
+    if any(k in g for k in ("devops", "deploy", "docker", "kubernetes", "ci/cd", "infrastructure", "pipeline")):
+        return "devops", "engineering"
+    if any(k in g for k in ("sale", "lead", "outreach", "crm", "prospect", "pitch", "cold email")):
+        return "sales-account-strategist", "sales"
+    if any(k in g for k in ("market", "campaign", "social media", "email marketing", "brand", "launch", "content")):
+        return "marketing-content-creator", "marketing"
+    if any(k in g for k in ("product", "prd", "roadmap", "user story", "priorit", "feature")):
+        return "product-manager", "product"
+    if any(k in g for k in ("research", "competitor", "market size", "tam", "trend", "analysis", "landscape")):
+        return "strategy-competitor-analyst", "strategy"
+    return "engineering-backend-architect", "engineering"
+
+
+def _native_graph_runner(run_id: str, run: dict, goal: str) -> None:
+    """
+    Background thread: runs a 3-agent DAG (plan → execute → ship) using the
+    native LLM runtime. Emits terminal lines into run['lines'] so the polling
+    endpoint can stream them to the frontend.
+    """
+    import asyncio as _asyncio
+    import sys as _sys
+    _sys.path.insert(0, str(_SWARM_ROOT))
+
+    def _emit(content: str) -> None:
+        _append_run_line(run_id, content)
+
+    try:
+        from runtime.orchestration import TaskGraph, TaskNode, GraphOrchestrator
+        from runtime.events import EventBus, EventType
+        from runtime import run_agent
     except Exception as exc:
-        _sys_line(run, f"reader error: {exc}")
+        _emit(f"[error] Failed to import native runtime: {exc}")
+        run["exit_code"] = 1
+        return
+
+    specialist_name, specialist_category = _pick_specialist(goal)
+
+    # Create an isolated workspace directory for this run
+    import os as _os
+    workspace = Path(f"/tmp/aos-workspace/{run_id}")
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    _emit(f"[sys] run {run_id[:8]} — native runtime (no CLI required)")
+    _emit(f"[sys] goal: {goal[:200]}")
+    _emit(f"[sys] specialist: {specialist_name}")
+    _emit(f"[sys] workspace: {workspace}")
+    _emit("")
+    _emit("PHASE 1/5 | QUESTIONNAIRE")
+    _emit("  Routing goal to specialist agents...")
+    _emit("")
+
+    perms = ["file.read", "file.write", "shell.run"]
+    graph = TaskGraph(id=run_id)
+
+    graph.add(TaskNode(
+        id="plan",
+        agent_name="planner",
+        agent_category="strategy",
+        task=(
+            f"You are planning work for this goal:\n\n  '{goal}'\n\n"
+            "Produce a concise execution plan with these sections:\n"
+            "  1. PROBLEM — what's being solved (2-3 sentences)\n"
+            "  2. APPROACH — the strategy and key steps\n"
+            "  3. DELIVERABLES — exact files and artefacts that will be created\n"
+            "  4. FILE STRUCTURE — list every file path to be created\n"
+            "  5. SUCCESS METRIC — one measurable outcome\n\n"
+            "Be specific and decisive. A specialist agent will execute against this plan verbatim."
+        ),
+        permissions=perms,
+        workspace_dir=str(workspace),
+        timeout_seconds=120,
+    ))
+
+    graph.add(TaskNode(
+        id="execute",
+        agent_name=specialist_name,
+        agent_category=specialist_category,
+        task=(
+            f"Build this:\n\n  '{goal}'\n\n"
+            "Use the planner's output above as your blueprint.\n\n"
+            "IMPORTANT — you MUST create actual files. Use your file_write tool to write "
+            "every file to disk. Do NOT just describe what to build — BUILD IT.\n\n"
+            "For each file:\n"
+            "  1. Call file_write with the correct path and complete file contents\n"
+            "  2. After writing, confirm: '[wrote] path/to/file'\n\n"
+            "Start with the most critical files first. Write complete, working code — "
+            "no placeholders, no TODOs. A developer should be able to run this immediately."
+        ),
+        depends_on=["plan"],
+        permissions=perms,
+        workspace_dir=str(workspace),
+        timeout_seconds=600,
+    ))
+
+    graph.add(TaskNode(
+        id="ship",
+        agent_name="marketing-content-creator",
+        agent_category="marketing",
+        task=(
+            f"Write the final delivery summary for:\n\n  '{goal}'\n\n"
+            "Based on all the work above, write a clear summary with:\n"
+            "  - WHAT WAS BUILT — every file created and what it does\n"
+            "  - HOW TO RUN — exact commands to boot the project locally\n"
+            "  - NEXT STEPS — the 3 most important immediate actions\n"
+            "  - QUICK WINS — things shippable in the next 48 hours\n"
+        ),
+        depends_on=["execute"],
+        permissions=perms,
+        workspace_dir=str(workspace),
+        timeout_seconds=120,
+    ))
+
+    bus = EventBus()
+
+    def _on_agent_started(event):
+        node_id = event.payload.get("node_id", "")
+        agent = event.payload.get("agent_name", node_id)
+        if node_id == "plan":
+            _emit("PHASE 2/5 | PLANNER")
+            _emit(f"  [sys] agent: {agent}")
+        elif node_id == "execute":
+            _emit("")
+            _emit("PHASE 3/5 | EXECUTE")
+            _emit(f"  Dispatching to {agent}")
+        elif node_id == "ship":
+            _emit("")
+            _emit("PHASE 5/5 | SHIP")
+            _emit(f"  [sys] agent: {agent}")
+
+    def _on_agent_completed(event):
+        node_id = event.payload.get("node_id", "")
+        dur_ms = event.payload.get("duration_ms", 0)
+        _emit(f"  SUCCESS {node_id} ({dur_ms // 1000}s)")
+
+    def _on_agent_failed(event):
+        node_id = event.payload.get("node_id", "")
+        err = event.payload.get("error", "unknown error")
+        _emit(f"  FAILED {node_id}: {err[:200]}")
+
+    bus.on(EventType.AGENT_STARTED, _on_agent_started)
+    bus.on(EventType.AGENT_COMPLETED, _on_agent_completed)
+    bus.on(EventType.AGENT_FAILED, _on_agent_failed)
+
+    async def _executor(node, upstream, _msg_bus):
+        if run.get("cancelled"):
+            raise RuntimeError("Run cancelled by user")
+        context_block = ""
+        if upstream:
+            parts = []
+            for dep_id, out in upstream.items():
+                txt = (out or {}).get("output", "")
+                if txt:
+                    parts.append(f"### From {dep_id}\n{txt[:8000]}")
+            if parts:
+                context_block = "\n\n## Upstream results\n\n" + "\n\n".join(parts)
+
+        result = await run_agent(
+            agent_name=node.agent_name,
+            task=node.task + context_block,
+            permissions=node.permissions,
+            execution_id=f"{run_id}:{node.id}",
+            agent_category=node.agent_category,
+            timeout_seconds=node.timeout_seconds,
+        )
+        if not result.success:
+            raise RuntimeError(result.error or "Agent execution failed")
+
+        if result.output:
+            _emit("")
+            _emit("[sys] agent response:")
+            for line in result.output.split("\n"):
+                _emit(line)
+            _emit("")
+
+        return result.to_dict()
+
+    try:
+        orchestrator = GraphOrchestrator(
+            graph=graph,
+            executor=_executor,
+            event_bus=bus,
+            execution_id=run_id,
+        )
+        result = _asyncio.run(orchestrator.run())
+        run["exit_code"] = 0 if result["success"] else 1
+        _emit("")
+
+        # List files written to workspace
+        written = []
+        for root, dirs, files in _os.walk(workspace):
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            for f in files:
+                rel = _os.path.relpath(_os.path.join(root, f), workspace)
+                written.append(rel)
+        if written:
+            _emit(f"[sys] workspace: {workspace}")
+            _emit(f"[sys] {len(written)} file(s) written:")
+            for f in sorted(written):
+                size = _os.path.getsize(workspace / f)
+                _emit(f"  ✓ {f}  ({size:,} bytes)")
+        else:
+            _emit(f"[sys] workspace: {workspace} (no files written — agent output only)")
+
+        status_word = "complete" if result["success"] else "finished with errors"
+        _emit(f"[sys] run {status_word} — exit {run['exit_code']}")
+    except Exception as exc:
+        import traceback as _tb
+        _emit(f"[error] {exc}")
+        _emit(_tb.format_exc()[-600:])
+        run["exit_code"] = 1
     finally:
-        run["done"] = True
-        run["exit_code"] = proc.returncode
-
-
-_CLAUDE_MODEL_MAP = {
-    "haiku":    "claude-haiku-4-5-20251001",
-    "sonnet":   "claude-sonnet-4-6",
-    "opus":     "claude-opus-4-7",
-}
+        if not run.get("done"):
+            status = "completed" if run.get("exit_code") == 0 else "failed"
+            _finish_run(run_id, run.get("exit_code", 1), status)
 
 
 class SwarmRunView(APIView):
     """
     POST /api/swarm/run/
-    Start an orchestrator run. Returns run_id immediately.
-    Body: { "goal": "...", "engine": "claude", "model": "haiku"|"sonnet"|"opus" }
+    Start a native multi-agent run. Returns run_id immediately.
+    Body: { "goal": "..." }
+
+    Runs plan → execute → ship via the native LLM runtime (no CLI subprocess).
+    Progress is streamed via GET /api/swarm/run/<run_id>/poll/.
     """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        goal   = (request.data.get("goal")   or "").strip()
-        engine = (request.data.get("engine") or "claude").strip()
-        model  = (request.data.get("model")  or "").strip().lower()
-
+        goal = (request.data.get("goal") or "").strip()
         if not goal:
             return Response({"error": "goal is required"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -562,49 +784,37 @@ class SwarmRunView(APIView):
             )
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        orchestrator = _SWARM_ROOT / "orchestrator.py"
-        if not orchestrator.exists():
-            return Response(
-                {"error": f"Orchestrator not found at {orchestrator}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
         run_id = str(uuid.uuid4())
-        env = _build_swarm_env()
-
-        # Pass model to ClaudeCodeEngine via env var so it can pass -m to the CLI
-        if engine == "claude" and model in _CLAUDE_MODEL_MAP:
-            env["SWARM_CLAUDE_MODEL"] = _CLAUDE_MODEL_MAP[model]
-
-        proc = subprocess.Popen(
-            [sys.executable, str(orchestrator), goal, "--engine", engine],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-            cwd=str(_SWARM_ROOT),
-            env=env,
+        ctx = SwarmExecutionContext.objects.create(
+            id=run_id,
+            aos_agent=None,
+            swarm_agent_name="native-run",
+            engine=SwarmEngine.GENERIC,
+            task_summary=goal[:500],
+            status="running",
+            started_at=timezone.now(),
+            run_lines=[],
+            run_exit_code=None,
         )
-
-        cmd_str = f"python3 orchestrator.py \"{goal}\" --engine {engine}"
-        if engine == "claude" and model in _CLAUDE_MODEL_MAP:
-            cmd_str += f" [model={_CLAUDE_MODEL_MAP[model]}]"
-
         run = {
-            "proc": proc, "lines": [], "done": False, "exit_code": None,
-            "goal": goal, "engine": engine, "model": model,
+            "lines": [],
+            "done": False,
+            "exit_code": None,
+            "goal": goal,
+            "engine": "native",
+            "model": "",
+            "ctx_id": str(ctx.id),
         }
-        run["lines"].append({"type": "line", "content": f"[sys] run {run_id[:8]} — {cmd_str}"})
-        run["lines"].append({"type": "line", "content": f"[sys] cwd: {_SWARM_ROOT}"})
-        run["lines"].append({"type": "line", "content": f"[sys] DEV={env.get('DEV', 'false')}"})
         _RUNS[run_id] = run
 
-        print(f"[swarm] launching: {cmd_str}", flush=True)
-        t = threading.Thread(target=_stdout_reader, args=(proc, run), daemon=True)
+        t = threading.Thread(
+            target=_native_graph_runner,
+            args=(run_id, run, goal),
+            daemon=True,
+        )
         t.start()
 
-        return Response({"run_id": run_id, "goal": goal, "engine": engine, "model": model})
+        return Response({"run_id": run_id, "goal": goal, "engine": "native", "model": ""})
 
 
 class SwarmRunStreamView(APIView):
@@ -615,7 +825,7 @@ class SwarmRunStreamView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, run_id):
-        run = _RUNS.get(run_id)
+        run = _load_run_state(run_id)
         if not run:
             return Response({"error": "Run not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -654,7 +864,7 @@ class SwarmRunPollView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, run_id):
-        run = _RUNS.get(run_id)
+        run = _load_run_state(run_id)
         if not run:
             return Response({"error": "Run not found"}, status=status.HTTP_404_NOT_FOUND)
         try:
@@ -678,20 +888,15 @@ class SwarmRunInputView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, run_id):
-        run = _RUNS.get(run_id)
+        run = _load_run_state(run_id)
         if not run:
             return Response({"error": "Run not found"}, status=status.HTTP_404_NOT_FOUND)
         if run["done"]:
             return Response({"error": "Run has already finished"}, status=status.HTTP_410_GONE)
-
-        text = (request.data.get("text") or "")
-        try:
-            run["proc"].stdin.write(text + "\n")
-            run["proc"].stdin.flush()
-        except OSError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        return Response({"ok": True})
+        return Response(
+            {"error": "Native swarm runs do not accept interactive stdin input"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 class SwarmRunStatusView(APIView):
@@ -699,7 +904,7 @@ class SwarmRunStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, run_id):
-        run = _RUNS.get(run_id)
+        run = _load_run_state(run_id)
         if not run:
             return Response({"error": "Run not found"}, status=status.HTTP_404_NOT_FOUND)
         return Response({
@@ -721,28 +926,29 @@ class SwarmRunCancelView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, run_id):
-        run = _RUNS.get(run_id)
+        run = _load_run_state(run_id)
         if not run:
             return Response({"error": "Run not found"}, status=status.HTTP_404_NOT_FOUND)
         if run["done"]:
             return Response({"detail": "Run already completed", "run_id": run_id})
-
-        proc = run.get("proc")
-        if proc and proc.poll() is None:
+        run_obj = _RUNS.get(run_id)
+        if run_obj is not None:
+            _append_run_line(run_id, "[sys] Run cancelled by user")
+            run_obj["cancelled"] = True
+            _finish_run(run_id, -1, "cancelled")
+        else:
             try:
-                proc.terminate()
-                try:
-                    proc.wait(timeout=5)
-                except Exception:
-                    proc.kill()
-            except OSError:
+                ctx = SwarmExecutionContext.objects.get(id=run_id)
+                ctx.status = "cancelled"
+                ctx.run_exit_code = -1
+                ctx.completed_at = timezone.now()
+                ctx.run_lines = list(ctx.run_lines or []) + [
+                    {"type": "line", "content": "[sys] Run cancelled by user"},
+                    {"type": "done", "exit_code": -1, "cancelled": True},
+                ]
+                ctx.save(update_fields=["status", "run_exit_code", "completed_at", "run_lines"])
+            except SwarmExecutionContext.DoesNotExist:
                 pass
-
-        run["done"] = True
-        run["exit_code"] = -1
-        run["lines"].append({"type": "line", "content": "[sys] Run cancelled by user"})
-        run["lines"].append({"type": "done", "exit_code": -1, "cancelled": True})
-
         return Response({"ok": True, "run_id": run_id, "detail": "Cancelled"})
 
 
@@ -772,7 +978,7 @@ class ExecutionCancelView(APIView):
         # Update DB record if it exists
         try:
             ctx = SwarmExecutionContext.objects.get(id=execution_id)
-            ctx.status = "CANCELLED"
+            ctx.status = "cancelled"
             ctx.save(update_fields=["status"])
         except SwarmExecutionContext.DoesNotExist:
             pass
@@ -817,10 +1023,10 @@ class WorkflowTemplateLaunchView(APIView):
                 id=execution_id,
                 aos_agent=None,
                 swarm_agent_name=f"template:{template_id}",
-                engine=SwarmEngine.NATIVE if hasattr(SwarmEngine, "NATIVE") else SwarmEngine.CLAUDE,
+                engine=SwarmEngine.GENERIC,
                 task_summary=idea[:500],
                 started_at=timezone.now(),
-                status="RUNNING",
+                status="running",
             )
 
             result = asyncio.run(run_graph(graph, execution_id=execution_id))
@@ -829,16 +1035,55 @@ class WorkflowTemplateLaunchView(APIView):
             # replay endpoint returns something useful for native runs.
             from apps.agent_intelligence.models import Conversation, TraceStep
 
-            ctx.status = "COMPLETED" if result.get("success") else "FAILED"
+            ctx.status = "completed" if result.get("success") else "failed"
             ctx.completed_at = timezone.now()
             ctx.save(update_fields=["status", "completed_at"])
 
             try:
+                # Conversation.agent is non-null FK, but a template run has no
+                # single owning agent. Resolve one in priority order:
+                #   1. SwarmAgentManifest mapping for the first node's swarm name
+                #   2. Any agent owned by the launching user
+                #   3. Get-or-create a per-user "swarm-orchestrator" agent
+                from apps.agent_registry.models import Agent
+
+                nodes_out = result.get("graph", {}).get("nodes", []) or []
+                anchor_agent = None
+                for n in nodes_out:
+                    manifest = SwarmAgentManifest.objects.filter(
+                        swarm_name=n.get("agent_name", "")
+                    ).select_related("aos_agent").first()
+                    if manifest and manifest.aos_agent:
+                        anchor_agent = manifest.aos_agent
+                        break
+
+                if anchor_agent is None and request.user.is_authenticated:
+                    anchor_agent = Agent.objects.filter(owner=request.user).first()
+
+                if anchor_agent is None and request.user.is_authenticated:
+                    anchor_agent, _ = Agent.objects.get_or_create(
+                        name="swarm-orchestrator",
+                        owner=request.user,
+                        defaults={
+                            "identity_key": f"swarm-orchestrator:{request.user.id}:{secrets.token_hex(8)}",
+                            "description": "System anchor for template / multi-agent swarm runs",
+                        },
+                    )
+
+                # Persist on the execution context so Observe replay can resolve
+                # policy logs + display the agent name.
+                if anchor_agent and ctx.aos_agent_id != anchor_agent.id:
+                    ctx.aos_agent = anchor_agent
+                    ctx.save(update_fields=["aos_agent"])
+
+                if anchor_agent is None:
+                    raise RuntimeError("No anchor agent resolvable for trace persistence")
+
                 conv, _ = Conversation.objects.get_or_create(
                     session_id=execution_id,
-                    defaults={"agent": None, "title": f"Template {template_id}"},
+                    defaults={"agent": anchor_agent, "title": f"Template {template_id}"},
                 )
-                for node in result.get("graph", {}).get("nodes", []) or []:
+                for node in nodes_out:
                     TraceStep.objects.create(
                         conversation=conv,
                         node_name=f"{node['id']}:{node['agent_name']}",
@@ -1085,7 +1330,7 @@ class ExecutionEventStreamView(APIView):
 
             while polls < MAX_POLLS:
                 qs = TraceStep.objects.filter(
-                    conversation__swarm_executions__id=execution_id
+                    conversation__session_id=execution_id
                 ).order_by("created_at")
                 if last_id:
                     qs = qs.filter(id__gt=last_id)
@@ -1176,28 +1421,52 @@ class ExecutionReplayView(APIView):
                 )
             )
 
+        # Shape events so the Observe live-feed renderer can read them directly.
+        # Observe expects: {event_type, timestamp, duration_ms, payload:{node,
+        # tokens_in, tokens_out, error, ...}} — see EVENT_LABEL in Observe.jsx.
         events = []
         for step in steps:
+            out = step["output_data"] or {}
+            status_str = out.get("status", "")
+            if status_str == "failed":
+                etype = "agent.failed"
+            elif status_str == "completed":
+                etype = "agent.completed"
+            else:
+                etype = "trace.step"
             events.append({
                 "source": "trace",
+                "event_type": etype,
                 "timestamp": step["created_at"].isoformat() if step["created_at"] else None,
-                "node": step["node_name"],
-                "input": step["input_data"],
-                "output": step["output_data"],
                 "duration_ms": step["duration_ms"],
-                "risk_score": step["risk_score"],
-                "is_loop": step["is_loop"],
+                "payload": {
+                    "node": step["node_name"],
+                    "input": step["input_data"],
+                    "output": out,
+                    "output_length": len(str(out.get("output", ""))),
+                    "tokens_in": out.get("tokens_in", 0),
+                    "tokens_out": out.get("tokens_out", 0),
+                    "error": out.get("error", ""),
+                    "status": status_str,
+                    "risk_score": step["risk_score"],
+                    "is_loop": step["is_loop"],
+                },
             })
 
         for log in policy_logs:
+            decision = (log["decision"] or "").lower()
+            etype = "policy.denied" if decision in ("deny", "denied") else "policy.checked"
             events.append({
                 "source": "policy",
+                "event_type": etype,
                 "timestamp": log["created_at"].isoformat() if log["created_at"] else None,
-                "policy": log["policy__name"],
-                "decision": log["decision"],
-                "resource": log["resource"],
-                "action": log["action"],
-                "reason": log["reason"],
+                "payload": {
+                    "policy": log["policy__name"],
+                    "decision": log["decision"],
+                    "resource": log["resource"],
+                    "action": log["action"],
+                    "reason": log["reason"],
+                },
             })
 
         events.sort(key=lambda e: e["timestamp"] or "")
@@ -1210,3 +1479,37 @@ class ExecutionReplayView(APIView):
             "events": events,
             "total_events": len(events),
         })
+
+
+class ExecutionListView(APIView):
+    """
+    GET /api/swarm/executions/
+    Lists recent swarm executions (most recent first).
+    Supports ?type=template to filter to template launches only.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = SwarmExecutionContext.objects.order_by("-started_at")
+        exec_type = request.query_params.get("type", "")
+        if exec_type == "template":
+            qs = qs.filter(swarm_agent_name__startswith="template:")
+        qs = qs[:30]
+        results = []
+        for ctx in qs:
+            name = ctx.swarm_agent_name or ""
+            template_id = name.replace("template:", "") if name.startswith("template:") else ""
+            duration_s = None
+            if ctx.started_at and ctx.completed_at:
+                duration_s = int((ctx.completed_at - ctx.started_at).total_seconds())
+            results.append({
+                "id": str(ctx.id),
+                "template_id": template_id,
+                "swarm_agent_name": name,
+                "status": ctx.status or "unknown",
+                "task_summary": (ctx.task_summary or "")[:160],
+                "started_at": ctx.started_at.isoformat() if ctx.started_at else None,
+                "completed_at": ctx.completed_at.isoformat() if ctx.completed_at else None,
+                "duration_s": duration_s,
+            })
+        return Response({"results": results, "count": len(results)})

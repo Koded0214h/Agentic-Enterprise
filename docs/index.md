@@ -22,6 +22,7 @@
 | [Security](./security.md) | Auth, JWT, RBAC, encryption, cautions, threat model |
 | [Configuration Reference](./configuration.md) | All environment variables and config files |
 | [Contributing & Extending](./contributing.md) | Adding agents, skills, policies, and API modules |
+| [My Docs](./my-docs/index.md) | Project-as-startup model, autonomy gaps, and implementation plan |
 
 ---
 

@@ -18,21 +18,21 @@ const PHASES = [
 ]
 
 const PHASE_TRIGGERS = [
-  /PHASE\s+1\s*[\/|]\s*5|QUESTIONNAIRE/i,
-  /PHASE\s+2\s*[\/|]\s*5|PLANNER/i,
-  /PHASE\s+3\s*[\/|]\s*5|EXECUTE/i,
-  /PHASE\s+4\s*[\/|]\s*5|DEBUG/i,
-  /PHASE\s+5\s*[\/|]\s*5|SHIP/i,
+  /PHASE\s+1\s*[\/|]\s*5|\bQUESTIONNAIRE\b/i,
+  /PHASE\s+2\s*[\/|]\s*5|\bPLANNER\b/i,
+  /PHASE\s+3\s*[\/|]\s*5|\bEXECUTE\b/i,
+  /PHASE\s+4\s*[\/|]\s*5|\bDEBUG\b/i,
+  /PHASE\s+5\s*[\/|]\s*5|\bSHIP\b/i,
 ]
 
 const DISPATCH_RE = /Dispatching to ([^\s.]+)/i
-const AGENT_DONE_RE = /SUCCESS ([^\s]+)|✅.*?([a-z][\w-]+)/i
+const AGENT_DONE_RE = /\bSUCCESS\b ([^\s(]+)|✅.*?([a-z][\w-]+)/i
 
-// Detect when orchestrator is prompting for input
+// Detect when orchestrator is prompting for interactive input.
+// Kept narrow — native runs never prompt; only old CLI runs do.
 const PROMPT_PATTERNS = [
-  /\?\s*$/, /\[Y\/n\]/i, /\[y\/N\]/i, /confirm/i,
-  /enter\s+(your|the)/i, /type\s+your/i, /answer/i,
-  />\s*$/, /:\s*$/,
+  /\[Y\/n\]/i, /\[y\/N\]/i,
+  /^>\s*$/, /^\?\s*$/,
 ]
 
 function looksLikePrompt(line) {
@@ -148,7 +148,8 @@ export default function SwarmRun() {
       } catch (err) {
         if (!active) return
         setStreamStatus('error')
-        addLine(`[error] poll failed — ${err.message}`)
+        addLine(`[error] poll failed — ${err.message} — retrying…`)
+        timer = setTimeout(poll, 2000)
         return
       }
       timer = setTimeout(poll, 500)

@@ -10,6 +10,8 @@ from .serializers import (
 )
 from .services import BillingService
 from apps.agent_registry.models import Agent
+from backend.invoice_manager import get_invoices
+from backend.mrr_calculator import calculate_mrr
 
 
 class DepartmentCostCenterViewSet(viewsets.ModelViewSet):
@@ -178,3 +180,60 @@ class UsageAlertsView(views.APIView):
                     'severity': severity,
                 })
         return Response({'alerts': alerts, 'total_alerts': len(alerts)})
+
+
+class FinanceOverviewView(views.APIView):
+    """
+    Consolidated finance snapshot covering usage, budgets, invoices, and an
+    estimated MRR based on paid invoice history.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        usage_summary = BillingService.get_usage_summary()
+        budgets = AgentBudget.objects.filter(is_active=True)
+        invoices = []
+        try:
+            invoices = get_invoices()
+        except Exception:
+            invoices = []
+
+        paid_amounts = [
+            float(inv.get("amount", 0) or 0)
+            for inv in invoices
+            if str(inv.get("status", "")).lower() == "paid"
+        ]
+        estimated_mrr = calculate_mrr(paid_amounts) if paid_amounts else 0.0
+        open_invoices = [inv for inv in invoices if str(inv.get("status", "")).lower() != "paid"]
+
+        over_alert = 0
+        over_limit = 0
+        for budget in budgets.select_related("agent", "department"):
+            if not budget.monthly_limit:
+                continue
+            pct = float(budget.current_month_spend / budget.monthly_limit * 100)
+            if pct >= budget.alert_threshold_percentage:
+                over_alert += 1
+            if pct >= 100:
+                over_limit += 1
+
+        return Response({
+            "usage_summary": {
+                "total_cost": float(usage_summary.get("total_cost") or 0),
+                "total_tokens_input": int(usage_summary.get("total_tokens_input") or 0),
+                "total_tokens_output": int(usage_summary.get("total_tokens_output") or 0),
+                "total_compute_time": int(usage_summary.get("total_compute_time") or 0),
+                "record_count": int(usage_summary.get("record_count") or 0),
+            },
+            "budget_summary": {
+                "active_budgets": budgets.count(),
+                "over_alert": over_alert,
+                "over_limit": over_limit,
+            },
+            "invoice_summary": {
+                "invoice_count": len(invoices),
+                "open_invoice_count": len(open_invoices),
+                "paid_invoice_total": float(sum(paid_amounts)),
+            },
+            "estimated_mrr": float(estimated_mrr),
+        })

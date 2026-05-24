@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "apps.knowledge_base",
     "apps.billing",
     "apps.swarm_bridge",
+    "apps.ops",
     "apps.notifications",
     "django.contrib.admin",
     "django.contrib.auth",

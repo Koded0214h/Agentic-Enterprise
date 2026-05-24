@@ -16,6 +16,7 @@ export const observe = {
   executionReplay: (executionId) =>
     api.get(`/swarm/executions/${executionId}/replay/`),
 
+  recentRuns: (type = 'template') => api.get(`/swarm/executions/?type=${type}`),
   failureAnalytics: () => api.get('/intelligence/analytics/failures/'),
   retryAnalytics: () => api.get('/intelligence/analytics/retries/'),
   workflowGraph: () => api.get('/intelligence/analytics/workflow-graph/'),

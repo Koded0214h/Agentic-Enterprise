@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   RiDashboardLine, RiRobot2Line, RiFlowChart, RiShieldCheckLine,
   RiWalletLine, RiShutDownLine, RiBellLine, RiRocketLine,
-  RiLayoutGridLine, RiEyeLine, RiSettings3Line, RiShieldLine,
+  RiLayoutGridLine, RiEyeLine, RiSettings3Line, RiShieldLine, RiBriefcaseLine,
   RiTeamLine, RiBrainLine, RiArrowRightLine,
 } from 'react-icons/ri'
 import { useAuth } from '../../context/AuthContext'
@@ -28,14 +28,15 @@ function buildNav(pendingCount) {
         { to: '/app/templates',   label: 'Templates',   Icon: RiLayoutGridLine },
       ],
     },
-    {
-      section: 'Operate',
-      items: [
-        { to: '/app/approvals', label: 'Approvals', Icon: RiShieldCheckLine, badge: pendingCount },
-        { to: '/app/observe',   label: 'Observe',   Icon: RiEyeLine },
-        { to: '/app/finance',   label: 'Finance',   Icon: RiWalletLine },
-      ],
-    },
+      {
+        section: 'Operate',
+        items: [
+          { to: '/app/approvals', label: 'Approvals', Icon: RiShieldCheckLine, badge: pendingCount },
+          { to: '/app/observe',   label: 'Observe',   Icon: RiEyeLine },
+          { to: '/app/ops',       label: 'Ops',       Icon: RiBriefcaseLine },
+          { to: '/app/finance',   label: 'Finance',   Icon: RiWalletLine },
+        ],
+      },
     {
       section: 'Configure',
       items: [
@@ -54,10 +55,23 @@ export default function AppShell() {
   const [pendingApprovals, setPendingApprovals] = useState([])
   const [activeCount, setActiveCount] = useState(0)
   const [swarmOpen, setSwarmOpen] = useState(false)
+  const [swarmInitialGoal, setSwarmInitialGoal] = useState('')
   const [bellOpen, setBellOpen] = useState(false)
   const bellRef = useRef(null)
   const { user, logout } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
+
+  // Non-runnable templates navigate to /app/swarm?prompt=... — intercept and open the drawer
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const prompt = params.get('prompt')
+    if (prompt && location.pathname === '/app/swarm') {
+      setSwarmInitialGoal(decodeURIComponent(prompt))
+      setSwarmOpen(true)
+      navigate('/app', { replace: true })
+    }
+  }, [location.search, location.pathname, navigate])
 
   useEffect(() => {
     Promise.all([agentsAPI.pendingActions(), agentsAPI.list()])
@@ -147,7 +161,7 @@ export default function AppShell() {
           <div className="shell-topbar-right">
             <div className="shell-status-pill">
               <span className="dot dot-green dot-pulse" />
-              <span>{activeCount} agent{activeCount !== 1 ? 's' : ''} active</span>
+              <span>{activeCount} agent{activeCount !== 1 ? 's' : ''} ready</span>
             </div>
             <NotificationBell />
             <div className="shell-bell-wrap" ref={bellRef}>
@@ -213,7 +227,11 @@ export default function AppShell() {
         </main>
       </div>
 
-      <SwarmRunDrawer open={swarmOpen} onClose={() => setSwarmOpen(false)} />
+      <SwarmRunDrawer
+        open={swarmOpen}
+        onClose={() => { setSwarmOpen(false); setSwarmInitialGoal('') }}
+        initialGoal={swarmInitialGoal}
+      />
     </div>
   )
 }
