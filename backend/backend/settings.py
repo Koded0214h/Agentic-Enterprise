@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "apps.policy_engine",
     "apps.agent_intelligence",
     "apps.knowledge_base",
+    "apps.projects",
     "apps.billing",
     "apps.swarm_bridge",
     "apps.ops",

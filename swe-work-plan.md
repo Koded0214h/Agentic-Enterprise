@@ -13,9 +13,19 @@ Turn AOS into a project-based startup operating system where a user can:
 
 ## Team
 
-- SWE 1: Backend platform and project model
-- SWE 2: Ops/connector integrations and durable business workflows
-- SWE 3: Frontend dashboard and operator experience
+- Koded: Backend platform and project model
+- Anas & Fazazi: Ops/connector integrations and durable business workflows
+- Abideen: Frontend dashboard and operator experience
+
+## Status
+
+The Koded lane is now implemented in-repo:
+
+- project boundary and membership model
+- project-scoped billing, policy, swarm, intelligence, and ops records
+- project dashboard and command-center routing
+- project-aware policy evaluation and audit logging
+- project budgets, goals, activities, and artifacts
 
 ## Working rules
 
@@ -26,7 +36,7 @@ Turn AOS into a project-based startup operating system where a user can:
 
 ## Sprint 1: Foundation
 
-### SWE 1: Project foundation
+### Koded: Project foundation
 
 Feature: `Project` model and project-scoped API
 
@@ -53,7 +63,7 @@ Feature: project-scoped workspace links
 - Done when:
   - a project can be selected as the operating boundary for new work
 
-### SWE 2: Ops core
+### Anas: Ops core
 
 Feature: sales/support ops objects under project ownership
 
@@ -81,7 +91,7 @@ Feature: queue processor and fallback bridge
   - lead/ticket creation can sync or fail over cleanly
   - queue state is durable and visible
 
-### SWE 3: Frontend shell
+### Abideen: Frontend shell
 
 Feature: project dashboard shell
 
@@ -107,7 +117,7 @@ Feature: ops dashboard for project context
 
 ## Sprint 2: Autonomy loop
 
-### SWE 1: Product execution loop
+### Koded: Product execution loop
 
 Feature: startup goal intake
 
@@ -131,7 +141,7 @@ Feature: workflow orchestration by project
 - Done when:
   - workflows are attributable to a project and can be replayed
 
-### SWE 2: Sales/support round trip
+### Anas: Sales/support round trip
 
 Feature: live CRM adapter validation
 
@@ -155,7 +165,7 @@ Feature: live support adapter validation
 - Done when:
   - support records can round-trip and update state correctly
 
-### SWE 3: Autonomy UX
+### Abideen: Autonomy UX
 
 Feature: project activity timeline
 
@@ -181,7 +191,7 @@ Feature: autonomy readiness panel
 
 ## Sprint 3: Company loops
 
-### SWE 1: Finance and policy
+### Koded: Finance and policy
 
 Feature: project budgets and spend enforcement
 
@@ -205,7 +215,7 @@ Feature: project policy gates
 - Done when:
   - autonomy is gated, not implied
 
-### SWE 2: Marketing loop
+### Anas: Marketing loop
 
 Feature: campaign planning and publishing
 
@@ -229,7 +239,7 @@ Feature: campaign measurement feedback
 - Done when:
   - marketing actions feed back into planning
 
-### SWE 3: Company command center
+### Abideen: Company command center
 
 Feature: unified project command center
 
@@ -279,4 +289,3 @@ AOS is at the vision line when:
 - AOS enforces budgets and policies
 - AOS can recover from failures
 - AOS keeps durable history of everything it did
-

@@ -17,7 +17,7 @@ class PolicyEvaluator:
         self.agent = agent
         self.applicable_policies = self._get_applicable_policies()
 
-    def _get_applicable_policies(self) -> List[Policy]:
+    def _get_applicable_policies(self, project_id=None) -> List[Policy]:
         """
         Return every active Policy that applies to this agent, ordered by
         descending priority.
@@ -45,18 +45,22 @@ class PolicyEvaluator:
 
         role_ids = self.agent.roles.values_list("id", flat=True)
 
+        project_scope = Q(project__isnull=True)
+        if project_id:
+            project_scope = Q(project_id=project_id) | Q(project__isnull=True)
+
         # Policies aimed directly at this agent or its roles.
         targeted = Policy.objects.filter(
             Q(is_active=True),
             Q(agents=self.agent) | Q(roles__in=role_ids),
-        )
+        ).filter(project_scope)
 
         # Policies with no agent or role assignments — truly global policies.
         global_policies = Policy.objects.filter(is_active=True).exclude(
             agents__isnull=False
         ).exclude(
             roles__isnull=False
-        )
+        ).filter(project_scope)
 
         policies = (
             (targeted | global_policies)
@@ -93,6 +97,10 @@ class PolicyEvaluator:
         Tuple[decision, policy, reason]
         """
         context = context or {}
+        project_id = context.get("project_id") or context.get("project")
+        if project_id and hasattr(project_id, "id"):
+            project_id = project_id.id
+        self.applicable_policies = self._get_applicable_policies(project_id=project_id)
         start_time = timezone.now()
 
         decision: str = PolicyEffect.DENY
@@ -219,9 +227,17 @@ class PolicyEvaluator:
         The context dict is now stored in ``request_data`` (a JSONField that
         *is* on the model) so the evaluation context is still auditable.
         """
+        project_value = None
+        if request_data:
+            project_value = request_data.get("project_id")
+            if project_value is None:
+                project_obj = request_data.get("project")
+                project_value = getattr(project_obj, "id", None)
+
         PolicyAuditLog.objects.create(
             agent=self.agent,
             policy=policy,
+            project_id=project_value,
             resource=resource,
             action=action,
             decision=decision,

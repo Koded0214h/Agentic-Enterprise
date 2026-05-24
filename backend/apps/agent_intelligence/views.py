@@ -29,6 +29,7 @@ from .security_logger import log_security_event
 from apps.agent_registry.models import Agent
 from apps.policy_engine.utils import PolicyEvaluator
 from apps.billing.services import BillingService, BudgetExceededError
+from apps.projects.models import Project
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ def _record_usage(agent, conversation, start_time):
         resource_id=conversation.id,
         compute_time_ms=duration_ms,
         cost=float(conversation.total_cost),
+        project=conversation.project,
     )
 
 
@@ -109,6 +111,7 @@ def _build_agent_state(agent, capability, conversation, content: str) -> dict:
         "messages": prior + [{"role": "user", "content": content}],
         "agent_id": str(agent.id),
         "conversation_id": str(conversation.id),
+        "project_id": str(conversation.project_id) if conversation.project_id else None,
         "iterations": 0,
         "max_iterations": getattr(capability, "max_iterations", 10),
     }
@@ -124,6 +127,22 @@ def _budget_guard(agent):
             status=status.HTTP_402_PAYMENT_REQUIRED,
         )
     return None
+
+
+def _resolve_project(user, project_id):
+    if not project_id:
+        return None
+    if user.is_staff:
+        return Project.objects.filter(id=project_id).first()
+    return Project.objects.filter(id=project_id, memberships__user=user).first()
+
+
+def _project_queryset(qs, user, project_id):
+    if not project_id:
+        return qs.filter(agent__owner=user)
+    if user.is_staff:
+        return qs.filter(project_id=project_id)
+    return qs.filter(project_id=project_id, project__memberships__user=user)
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +203,14 @@ class ConversationViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return self.queryset.filter(agent__owner=self.request.user)
+        project_id = self.request.query_params.get("project_id")
+        qs = self.queryset
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+            if not self.request.user.is_staff:
+                qs = qs.filter(project__memberships__user=self.request.user)
+            return qs
+        return qs.filter(agent__owner=self.request.user)
 
     @action(detail=True, methods=["post"])
     def message(self, request, pk=None):
@@ -225,6 +251,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
             PendingAction.objects.create(
                 conversation=conversation,
                 agent=agent,
+                project=conversation.project,
                 action_type="chat",
                 resource="agent:execute",
                 reason=reason,
@@ -281,7 +308,14 @@ class WorkflowTaskViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return self.queryset.filter(agent__owner=self.request.user)
+        project_id = self.request.query_params.get("project_id")
+        qs = self.queryset
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+            if not self.request.user.is_staff:
+                qs = qs.filter(project__memberships__user=self.request.user)
+            return qs
+        return qs.filter(agent__owner=self.request.user)
 
     @action(detail=True, methods=["post"])
     def add_dependency(self, request, pk=None):
@@ -323,7 +357,14 @@ class PendingActionViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return self.queryset.filter(agent__owner=self.request.user)
+        project_id = self.request.query_params.get("project_id")
+        qs = self.queryset
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+            if not self.request.user.is_staff:
+                qs = qs.filter(project__memberships__user=self.request.user)
+            return qs
+        return qs.filter(agent__owner=self.request.user)
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
@@ -505,6 +546,7 @@ class AgentExecuteView(views.APIView):
         conv_status = "PENDING_APPROVAL" if decision == "ESCALATE" else "ACTIVE"
         conversation = Conversation.objects.create(
             agent=agent,
+            project=_resolve_project(request.user, request.data.get("project_id")),
             title=f"Task: {task[:50]}",
             status=conv_status,
             llm_config=capability.primary_llm,
@@ -515,6 +557,7 @@ class AgentExecuteView(views.APIView):
             PendingAction.objects.create(
                 conversation=conversation,
                 agent=agent,
+                project=conversation.project,
                 action_type="task",
                 resource="agent:execute",
                 reason=reason,
@@ -615,6 +658,7 @@ class AgentStreamView(views.APIView):
         capability = agent.capability
         conversation = Conversation.objects.create(
             agent=agent,
+            project=_resolve_project(request.user, request.data.get("project_id")),
             title=f"Stream: {task[:50]}",
             status="ACTIVE",
             llm_config=capability.primary_llm,
@@ -650,6 +694,7 @@ class AgentStreamView(views.APIView):
                     resource_type="stream_conversation",
                     resource_id=conversation.id,
                     cost=_ESTIMATED_COST_PER_TURN,
+                    project=conversation.project,
                 )
                 done_payload = json.dumps({"type": "done", "conversation_id": str(conversation.id)})
                 yield f"data: {done_payload}\n\n"

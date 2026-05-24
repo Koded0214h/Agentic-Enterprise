@@ -1,0 +1,370 @@
+.projects-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.projects-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.projects-error {
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--red);
+  font-size: 12px;
+}
+
+.projects-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.projects-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px;
+}
+
+.projects-kpi-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.projects-kpi-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+
+.projects-kpi-value {
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--text-h);
+  letter-spacing: -0.04em;
+}
+
+.projects-kpi-sub {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.projects-grid,
+.projects-content-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.projects-panel {
+  padding: 18px;
+}
+
+.projects-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.projects-form,
+.projects-list-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.projects-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.projects-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.projects-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-2);
+  color: var(--text-h);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.projects-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+}
+
+.projects-field textarea.projects-input {
+  resize: vertical;
+  min-height: 90px;
+}
+
+.projects-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.projects-list-item {
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.projects-list-item:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.projects-list-item.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-border);
+}
+
+.projects-list-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.projects-list-title,
+.projects-row-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.projects-list-sub,
+.projects-row-sub {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.projects-list-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.projects-empty {
+  padding: 18px 0 4px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.projects-hero {
+  padding: 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.projects-hero-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.projects-hero-main h2 {
+  font-size: 28px;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  color: var(--text-h);
+  margin: 8px 0 8px;
+}
+
+.projects-hero-main p {
+  font-size: 13px;
+  color: var(--text);
+  max-width: 68ch;
+}
+
+.projects-hero-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.projects-budget {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-end;
+}
+
+.projects-budget span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.projects-budget strong {
+  font-size: 24px;
+  color: var(--text-h);
+}
+
+.projects-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.projects-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.projects-metric {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.projects-metric span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text);
+}
+
+.projects-metric strong {
+  font-size: 20px;
+  color: var(--text-h);
+}
+
+.projects-loop-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.projects-loop-box {
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.projects-loop-box span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.projects-loop-box strong {
+  font-size: 22px;
+  color: var(--text-h);
+}
+
+.projects-loop-box small {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.projects-inline-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.projects-list-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.projects-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.projects-row:last-child {
+  border-bottom: none;
+}
+
+@media (max-width: 1100px) {
+  .projects-kpis,
+  .projects-grid,
+  .projects-content-grid,
+  .projects-metrics,
+  .projects-loop-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .projects-kpis,
+  .projects-grid,
+  .projects-content-grid,
+  .projects-metrics,
+  .projects-loop-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .projects-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .projects-hero {
+    flex-direction: column;
+  }
+
+  .projects-hero-side {
+    align-items: flex-start;
+  }
+}

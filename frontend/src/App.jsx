@@ -22,6 +22,7 @@ import Settings from './pages/app/Settings'
 import MemoryViewer from './pages/app/MemoryViewer'
 import WorkflowTemplates from './pages/app/WorkflowTemplates'
 import AgentDetail from './pages/app/AgentDetail'
+import Projects from './pages/app/Projects'
 import Ops from './pages/app/Ops'
 import TermsOfService from './pages/TermsOfService'
 import PrivacyPolicy from './pages/PrivacyPolicy'
@@ -45,6 +46,7 @@ export default function App() {
             element={<ProtectedRoute><AppShell /></ProtectedRoute>}
           >
             <Route index element={<Overview />} />
+            <Route path="projects" element={<Projects />} />
             <Route path="blueprints" element={<BlueprintGallery />} />
             <Route path="blueprints/:id" element={<BlueprintDetail />} />
             <Route path="blueprints/:id/deploy" element={<DeployWizard />} />

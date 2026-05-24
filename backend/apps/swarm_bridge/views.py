@@ -30,6 +30,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from apps.agent_registry.models import Agent, AgentType, AgentStatus
 from apps.billing.models import UsageRecord
+from apps.billing.services import BillingService
 from apps.policy_engine.models import PolicyAuditLog, PolicyEffect
 from apps.policy_engine.utils import PolicyEvaluator
 from apps.agent_intelligence.models import TraceStep
@@ -46,6 +47,7 @@ from .serializers import (
     SwarmAgentRegistrationResponseSerializer,
     SwarmExecutionContextSerializer,
 )
+from apps.projects.models import Project
 
 
 def _resolve_aos_agent(agent_name: str) -> Agent | None:
@@ -56,6 +58,14 @@ def _resolve_aos_agent(agent_name: str) -> Agent | None:
         ).aos_agent
     except SwarmAgentManifest.DoesNotExist:
         return None
+
+
+def _resolve_project(user, project_id):
+    if not project_id:
+        return None
+    if user.is_staff:
+        return Project.objects.filter(id=project_id).first()
+    return Project.objects.filter(id=project_id, memberships__user=user).first()
 
 
 # ---------------------------------------------------------------------------
@@ -169,12 +179,14 @@ class SwarmPolicyCheckView(APIView):
         execution_id = data["execution_id"]
         agent_name = data["agent_name"]
         aos_agent = _resolve_aos_agent(agent_name)
+        project = _resolve_project(request.user, data.get("project_id"))
 
         # Create or retrieve the execution context
         ctx, _ = SwarmExecutionContext.objects.get_or_create(
             id=execution_id,
             defaults={
                 "aos_agent": aos_agent,
+                "project": project,
                 "swarm_agent_name": agent_name,
                 "engine": data.get("engine", SwarmEngine.CLAUDE),
                 "workflow_phase": data.get("workflow_phase"),
@@ -228,6 +240,7 @@ class SwarmPolicyCheckView(APIView):
                     pending = PendingAction.objects.create(
                         conversation=conv,
                         agent=aos_agent,
+                        project=project or conv.project,
                         action_type="swarm_dispatch",
                         resource=f"swarm:execute:{agent_name}",
                         state_snapshot={
@@ -274,6 +287,7 @@ class SwarmUsageReportView(APIView):
         data = serializer.validated_data
 
         execution_id = data["execution_id"]
+        project = _resolve_project(request.user, data.get("project_id"))
 
         try:
             ctx = SwarmExecutionContext.objects.select_related("aos_agent").get(
@@ -302,6 +316,7 @@ class SwarmUsageReportView(APIView):
         if ctx.aos_agent:
             usage_record = UsageRecord.objects.create(
                 agent=ctx.aos_agent,
+                project=ctx.project or project,
                 department=ctx.aos_agent.department,
                 tokens_input=data["tokens_input"],
                 tokens_output=data["tokens_output"],
@@ -318,6 +333,8 @@ class SwarmUsageReportView(APIView):
                     Decimal(str(budget.current_month_spend)) + Decimal(str(data["cost_usd"]))
                 )
                 budget.save(update_fields=["current_month_spend"])
+            if ctx.project:
+                BillingService.update_budget(project=ctx.project, cost=data["cost_usd"])
 
         return Response({
             "status": "recorded",
@@ -349,6 +366,7 @@ class SwarmTraceEventView(APIView):
         data = serializer.validated_data
 
         execution_id = data["execution_id"]
+        project = _resolve_project(request.user, data.get("project_id"))
 
         try:
             ctx = SwarmExecutionContext.objects.get(id=execution_id)
@@ -364,15 +382,16 @@ class SwarmTraceEventView(APIView):
 
         conv = None
         if ctx.aos_agent:
-            conv, _ = Conversation.objects.get_or_create(
-                session_id=str(execution_id),
-                defaults={"agent": ctx.aos_agent, "status": "active"},
-            )
+                conv, _ = Conversation.objects.get_or_create(
+                    session_id=str(execution_id),
+                    defaults={"agent": ctx.aos_agent, "status": "active", "project": project or ctx.project},
+                )
 
         trace_step = None
         if conv:
             payload = data.get("payload") or {}
             trace_step = TraceStep.objects.create(
+                project=ctx.project or project or conv.project,
                 conversation=conv,
                 node_name=f"{data['phase']}:{data['event_type']}",
                 input_data=payload.get("input", {}),
@@ -788,6 +807,7 @@ class SwarmRunView(APIView):
         ctx = SwarmExecutionContext.objects.create(
             id=run_id,
             aos_agent=None,
+            project=_resolve_project(request.user, request.data.get("project_id")),
             swarm_agent_name="native-run",
             engine=SwarmEngine.GENERIC,
             task_summary=goal[:500],
@@ -1022,6 +1042,7 @@ class WorkflowTemplateLaunchView(APIView):
             ctx = SwarmExecutionContext.objects.create(
                 id=execution_id,
                 aos_agent=None,
+                project=_resolve_project(request.user, request.data.get("project_id")),
                 swarm_agent_name=f"template:{template_id}",
                 engine=SwarmEngine.GENERIC,
                 task_summary=idea[:500],
@@ -1081,10 +1102,15 @@ class WorkflowTemplateLaunchView(APIView):
 
                 conv, _ = Conversation.objects.get_or_create(
                     session_id=execution_id,
-                    defaults={"agent": anchor_agent, "title": f"Template {template_id}"},
+                    defaults={
+                        "agent": anchor_agent,
+                        "project": ctx.project,
+                        "title": f"Template {template_id}",
+                    },
                 )
                 for node in nodes_out:
                     TraceStep.objects.create(
+                        project=ctx.project or conv.project,
                         conversation=conv,
                         node_name=f"{node['id']}:{node['agent_name']}",
                         input_data={"task": node.get("task", "")[:1000], "depends_on": node.get("depends_on", [])},

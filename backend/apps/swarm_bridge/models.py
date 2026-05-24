@@ -49,6 +49,13 @@ class SwarmExecutionContext(models.Model):
     usage records, and trace steps.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='swarm_executions',
+    )
 
     # Identity
     aos_agent = models.ForeignKey(

@@ -26,6 +26,7 @@ class AgentState(TypedDict):
     next: str
     agent_id: str
     conversation_id: str
+    project_id: str | None
     iterations: int
     max_iterations: int
 
@@ -110,11 +111,13 @@ class LangGraphAgentFactory:
                 resource_type="supervisor_turn",
                 resource_id=state.get("conversation_id"),
                 compute_time_ms=duration_ms,
-                cost=0.0005 # Higher cost for executive routing
+                cost=0.0005, # Higher cost for executive routing
+                project=state.get("project_id"),
             )
 
             try:
                 TraceStep.objects.create(
+                    project_id=state.get("project_id"),
                     conversation_id=state.get("conversation_id"),
                     node_name="supervisor",
                     input_data={"message_count": len(state["messages"])},
@@ -235,12 +238,14 @@ class LangGraphAgentFactory:
             
             # Record Usage for billing
             from apps.billing.services import BillingService
+            project_id = Conversation.objects.filter(id=conv_id).values_list("project_id", flat=True).first() if conv_id else None
             BillingService.record_usage(
                 agent=agent,
                 resource_type="node_turn",
                 resource_id=conv_id,
                 compute_time_ms=duration_ms,
-                cost=0.0001 # Baseline cost per turn for functional agents
+                cost=0.0001, # Baseline cost per turn for functional agents
+                project=project_id,
             )
 
             # Simple loop detection
@@ -253,6 +258,7 @@ class LangGraphAgentFactory:
 
             try:
                 TraceStep.objects.create(
+                    project_id=state.get("project_id"),
                     conversation_id=conv_id,
                     node_name="agent",
                     input_data={"message_count": len(messages)},

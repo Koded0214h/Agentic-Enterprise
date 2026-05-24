@@ -10,6 +10,7 @@ from .serializers import (
 )
 from .services import BillingService
 from apps.agent_registry.models import Agent
+from apps.projects.models import Project
 from backend.invoice_manager import get_invoices
 from backend.mrr_calculator import calculate_mrr
 
@@ -26,14 +27,20 @@ class UsageRecordViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        project_id = self.request.query_params.get("project_id")
         if self.request.user.is_staff:
-            return UsageRecord.objects.all()
-        return UsageRecord.objects.filter(agent__owner=self.request.user)
+            qs = UsageRecord.objects.all()
+        else:
+            qs = UsageRecord.objects.filter(agent__owner=self.request.user)
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+        return qs
 
     @action(detail=False, methods=["get"])
     def summary(self, request):
         agent_id = request.query_params.get("agent_id")
         department_id = request.query_params.get("department_id")
+        project_id = request.query_params.get("project_id")
         start_date = request.query_params.get("start_date")
         end_date = request.query_params.get("end_date")
         summary = BillingService.get_usage_summary(
@@ -41,14 +48,18 @@ class UsageRecordViewSet(viewsets.ReadOnlyModelViewSet):
             department_id=department_id,
             start_date=start_date,
             end_date=end_date,
+            project_id=project_id,
         )
         return Response(summary)
 
     @action(detail=False, methods=['get'])
     def history(self, request):
         days = int(request.query_params.get('days', 30))
+        project_id = request.query_params.get("project_id")
         since = timezone.now() - timezone.timedelta(days=days)
         qs = self.get_queryset().filter(created_at__gte=since).select_related('agent')
+        if project_id:
+            qs = qs.filter(project_id=project_id)
 
         from django.core.paginator import Paginator
         page_num = int(request.query_params.get('page', 1))
@@ -98,6 +109,7 @@ class AgentBudgetViewSet(viewsets.ModelViewSet):
         """
         agent_id = request.query_params.get("agent_id")
         department_id = request.query_params.get("department_id")
+        project_id = request.query_params.get("project_id")
 
         if agent_id:
             try:
@@ -113,8 +125,30 @@ class AgentBudgetViewSet(viewsets.ModelViewSet):
                 return Response({"error": "Department not found"}, status=status.HTTP_404_NOT_FOUND)
             return Response(BillingService.get_budget_status(department=dept))
 
+        if project_id:
+            try:
+                project = Project.objects.get(id=project_id)
+            except Project.DoesNotExist:
+                return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+            budget = AgentBudget.objects.filter(project=project, is_active=True).first()
+            if not budget:
+                return Response({"has_budget": False})
+            limit = float(budget.monthly_limit)
+            spend = float(budget.current_month_spend)
+            pct = round((spend / limit * 100) if limit > 0 else 0, 2)
+            return Response({
+                "has_budget": True,
+                "monthly_limit": limit,
+                "current_spend": spend,
+                "remaining": round(limit - spend, 6),
+                "percent_used": pct,
+                "alert_threshold": budget.alert_threshold_percentage,
+                "over_alert": pct >= budget.alert_threshold_percentage,
+                "over_limit": spend >= limit,
+            })
+
         return Response(
-            {"error": "Provide agent_id or department_id"},
+            {"error": "Provide agent_id, department_id, or project_id"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -130,9 +164,12 @@ class WorkflowCostSummaryView(views.APIView):
 
     def get(self, request):
         from django.db.models import Sum, Count
+        project_id = request.query_params.get("project_id")
+        qs = UsageRecord.objects.filter(workflow_id__isnull=False)
+        if project_id:
+            qs = qs.filter(project_id=project_id)
         workflow_costs = (
-            UsageRecord.objects
-            .filter(workflow_id__isnull=False)
+            qs
             .values('workflow_id', 'workflow_name')
             .annotate(
                 total_cost=Sum('cost'),
@@ -161,7 +198,10 @@ class UsageAlertsView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        project_id = request.query_params.get("project_id")
         budgets = AgentBudget.objects.filter(is_active=True).select_related('agent', 'department')
+        if project_id:
+            budgets = budgets.filter(project_id=project_id)
         alerts = []
         for budget in budgets:
             if not budget.monthly_limit:
@@ -190,8 +230,11 @@ class FinanceOverviewView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        usage_summary = BillingService.get_usage_summary()
+        project_id = request.query_params.get("project_id")
+        usage_summary = BillingService.get_usage_summary(project_id=project_id)
         budgets = AgentBudget.objects.filter(is_active=True)
+        if project_id:
+            budgets = budgets.filter(project_id=project_id)
         invoices = []
         try:
             invoices = get_invoices()

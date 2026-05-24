@@ -22,21 +22,22 @@ function buildNav(pendingCount) {
     {
       section: 'Build',
       items: [
+        { to: '/app/projects',   label: 'Projects',   Icon: RiBriefcaseLine },
         { to: '/app/blueprints',  label: 'Blueprints',  Icon: RiLayoutGridLine },
         { to: '/app/agents',      label: 'Agents',      Icon: RiRobot2Line },
         { to: '/app/workflows',   label: 'Workflows',   Icon: RiFlowChart },
         { to: '/app/templates',   label: 'Templates',   Icon: RiLayoutGridLine },
       ],
     },
-      {
-        section: 'Operate',
-        items: [
-          { to: '/app/approvals', label: 'Approvals', Icon: RiShieldCheckLine, badge: pendingCount },
-          { to: '/app/observe',   label: 'Observe',   Icon: RiEyeLine },
-          { to: '/app/ops',       label: 'Ops',       Icon: RiBriefcaseLine },
-          { to: '/app/finance',   label: 'Finance',   Icon: RiWalletLine },
-        ],
-      },
+    {
+      section: 'Operate',
+      items: [
+        { to: '/app/approvals', label: 'Approvals', Icon: RiShieldCheckLine, badge: pendingCount },
+        { to: '/app/observe',   label: 'Observe',   Icon: RiEyeLine },
+        { to: '/app/ops',       label: 'Ops',       Icon: RiBriefcaseLine },
+        { to: '/app/finance',   label: 'Finance',   Icon: RiWalletLine },
+      ],
+    },
     {
       section: 'Configure',
       items: [

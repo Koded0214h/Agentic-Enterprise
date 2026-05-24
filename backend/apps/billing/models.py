@@ -21,6 +21,13 @@ class DepartmentCostCenter(models.Model):
 class UsageRecord(models.Model):
     """Granular usage records for agents."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='usage_records',
+    )
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='usage_records')
     department = models.ForeignKey(DepartmentCostCenter, on_delete=models.SET_NULL, null=True, related_name='usage_records')
     
@@ -51,6 +58,13 @@ class UsageRecord(models.Model):
 class AgentBudget(models.Model):
     """Budget limits for agents or departments."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='budgets',
+    )
     agent = models.OneToOneField(Agent, on_delete=models.CASCADE, related_name='budget', null=True, blank=True)
     department = models.OneToOneField(DepartmentCostCenter, on_delete=models.CASCADE, related_name='budget', null=True, blank=True)
     

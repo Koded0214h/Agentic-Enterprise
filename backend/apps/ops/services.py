@@ -18,6 +18,7 @@ from .connectors import (
     IntercomSupportConnector,
 )
 from .models import Account, Lead, Opportunity, Ticket, Touchpoint, QueueItem
+from apps.projects.models import Project
 
 
 def _crm_provider_name() -> str:
@@ -79,6 +80,14 @@ def _guess_domain(email: str) -> str:
     return email.split("@", 1)[1].strip().lower()
 
 
+def _resolve_project(owner, project_id):
+    if not project_id:
+        return None
+    if owner and owner.is_staff:
+        return Project.objects.filter(id=project_id).first()
+    return Project.objects.filter(id=project_id, memberships__user=owner).first()
+
+
 def _get_or_create_account(owner, *, name: str = "", domain: str = "", industry: str = "") -> Account | None:
     candidate_name = name.strip()
     candidate_domain = domain.strip().lower()
@@ -127,6 +136,7 @@ class OpsService:
     def create_lead(cls, *, owner, data: dict) -> tuple[Lead, QueueItem]:
         company = (data.get("company") or "").strip()
         email = (data.get("email") or "").strip()
+        project = _resolve_project(owner, data.get("project_id"))
         account = _get_or_create_account(
             owner,
             name=company or data.get("account_name", ""),
@@ -135,6 +145,7 @@ class OpsService:
         )
         lead = Lead.objects.create(
             owner=owner,
+            project=project,
             account=account,
             name=data.get("name") or company or email or "Unnamed lead",
             email=email,
@@ -149,6 +160,7 @@ class OpsService:
             kind=QueueItem.Kind.LEAD_SYNC,
             payload={"lead_id": str(lead.id), **data},
             lead=lead,
+            project=project,
             external_provider="",
         )
         return lead, queue_item
@@ -156,6 +168,7 @@ class OpsService:
     @classmethod
     def create_opportunity(cls, *, owner, data: dict, lead: Lead | None = None) -> tuple[Opportunity, QueueItem]:
         account = lead.account if lead and lead.account else None
+        project = lead.project if lead and lead.project else _resolve_project(owner, data.get("project_id"))
         if not account and data.get("account_name"):
             account = _get_or_create_account(
                 owner,
@@ -165,6 +178,7 @@ class OpsService:
             )
         opportunity = Opportunity.objects.create(
             owner=owner,
+            project=project,
             account=account,
             lead=lead,
             title=data.get("title") or (lead.name if lead else "Untitled opportunity"),
@@ -179,6 +193,7 @@ class OpsService:
             kind=QueueItem.Kind.OPPORTUNITY_SYNC,
             payload={"opportunity_id": str(opportunity.id), **data},
             opportunity=opportunity,
+            project=project,
         )
         if lead and lead.status != Lead.Status.CONVERTED:
             lead.status = Lead.Status.CONVERTED
@@ -194,8 +209,10 @@ class OpsService:
             domain=data.get("domain") or _guess_domain(data.get("requester_email", "")),
             industry=data.get("industry", ""),
         )
+        project = _resolve_project(owner, data.get("project_id"))
         ticket = Ticket.objects.create(
             owner=owner,
+            project=project,
             account=account,
             requester_name=data.get("requester_name") or data.get("name") or "Requester",
             requester_email=data.get("requester_email") or data.get("email") or "",
@@ -212,6 +229,7 @@ class OpsService:
             kind=QueueItem.Kind.TICKET_SYNC,
             payload={"ticket_id": str(ticket.id), **data},
             ticket=ticket,
+            project=project,
         )
         return ticket, queue_item
 
@@ -221,18 +239,23 @@ class OpsService:
         lead = None
         opportunity = None
         ticket = None
+        project = _resolve_project(owner, data.get("project_id"))
         if data.get("lead_id"):
             lead = Lead.objects.filter(id=data["lead_id"], owner=owner).first()
             account = lead.account if lead else None
+            project = project or (lead.project if lead else None)
         if data.get("opportunity_id"):
             opportunity = Opportunity.objects.filter(id=data["opportunity_id"], owner=owner).first()
             account = account or (opportunity.account if opportunity else None)
+            project = project or (opportunity.project if opportunity else None)
         if data.get("ticket_id"):
             ticket = Ticket.objects.filter(id=data["ticket_id"], owner=owner).first()
             account = account or (ticket.account if ticket else None)
+            project = project or (ticket.project if ticket else None)
 
         touchpoint = Touchpoint.objects.create(
             owner=owner,
+            project=project,
             account=account,
             lead=lead,
             opportunity=opportunity,
@@ -248,6 +271,7 @@ class OpsService:
             kind=QueueItem.Kind.TOUCHPOINT_SYNC,
             payload={"touchpoint_id": str(touchpoint.id), **data},
             touchpoint=touchpoint,
+            project=project,
         )
         return touchpoint
 
@@ -262,10 +286,12 @@ class OpsService:
         opportunity: Opportunity | None = None,
         ticket: Ticket | None = None,
         touchpoint: Touchpoint | None = None,
+        project=None,
         external_provider: str = "",
     ) -> QueueItem:
         return QueueItem.objects.create(
             owner=owner,
+            project=project,
             kind=kind,
             payload=payload or {},
             lead=lead,
@@ -303,6 +329,7 @@ class OpsService:
         support = get_support_connector()
         fallback = FallbackBridge()
         payload = item.payload or {}
+        project = item.project
         item.status = QueueItem.Status.PROCESSING
         item.attempts += 1
         item.last_error = ""
@@ -386,7 +413,7 @@ class OpsService:
         return processed
 
     @classmethod
-    def overview(cls, *, owner=None) -> dict:
+    def overview(cls, *, owner=None, project=None) -> dict:
         account_qs = Account.objects.all()
         lead_qs = Lead.objects.all()
         opp_qs = Opportunity.objects.all()
@@ -400,6 +427,13 @@ class OpsService:
             ticket_qs = ticket_qs.filter(owner=owner)
             touchpoint_qs = touchpoint_qs.filter(owner=owner)
             queue_qs = queue_qs.filter(owner=owner)
+        if project is not None:
+            account_qs = account_qs.filter(project=project)
+            lead_qs = lead_qs.filter(project=project)
+            opp_qs = opp_qs.filter(project=project)
+            ticket_qs = ticket_qs.filter(project=project)
+            touchpoint_qs = touchpoint_qs.filter(project=project)
+            queue_qs = queue_qs.filter(project=project)
 
         crm = get_crm_connector()
         support = get_support_connector()

@@ -1,7 +1,10 @@
 import { api } from './client'
 
 export const ops = {
-  overview: () => api.get('/ops/overview/'),
+  overview: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return api.get(`/ops/overview/${qs ? '?' + qs : ''}`)
+  },
   connectors: () => api.get('/ops/connectors/'),
   accounts: {
     list: () => api.get('/ops/accounts/'),

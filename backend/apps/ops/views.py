@@ -14,14 +14,22 @@ from .serializers import (
     QueueItemSerializer,
 )
 from .services import OpsService, connector_status
+from apps.projects.models import Project
 
 
 class OwnerQuerysetMixin:
     def get_queryset(self):
         qs = super().get_queryset()
         if self.request.user.is_staff:
+            project_id = self.request.query_params.get("project_id")
+            if project_id:
+                return qs.filter(project_id=project_id)
             return qs
-        return qs.filter(owner=self.request.user)
+        qs = qs.filter(owner=self.request.user)
+        project_id = self.request.query_params.get("project_id")
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+        return qs
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
@@ -76,6 +84,7 @@ class LeadViewSet(OwnerQuerysetMixin, viewsets.ModelViewSet):
             kind=QueueItem.Kind.LEAD_SYNC,
             payload={"lead_id": str(lead.id), **request.data},
             lead=lead,
+            project=lead.project,
         )
         OpsService.process_queue_item(queue_item)
         return Response(QueueItemSerializer(queue_item).data)
@@ -109,6 +118,7 @@ class OpportunityViewSet(OwnerQuerysetMixin, viewsets.ModelViewSet):
             kind=QueueItem.Kind.OPPORTUNITY_SYNC,
             payload={"opportunity_id": str(opportunity.id), **request.data},
             opportunity=opportunity,
+            project=opportunity.project,
         )
         OpsService.process_queue_item(queue_item)
         return Response(QueueItemSerializer(queue_item).data)
@@ -143,6 +153,7 @@ class TicketViewSet(OwnerQuerysetMixin, viewsets.ModelViewSet):
                 "message": request.data.get("message") or "Ticket resolved",
             },
             ticket=ticket,
+            project=ticket.project,
         )
         OpsService.process_queue_item(queue_item)
         return Response(
@@ -160,6 +171,7 @@ class TicketViewSet(OwnerQuerysetMixin, viewsets.ModelViewSet):
             kind=QueueItem.Kind.TICKET_SYNC,
             payload={"ticket_id": str(ticket.id), **request.data},
             ticket=ticket,
+            project=ticket.project,
         )
         OpsService.process_queue_item(queue_item)
         return Response(QueueItemSerializer(queue_item).data)
@@ -210,23 +222,35 @@ class OpsOverviewView(APIView):
 
     def get(self, request):
         owner = None if request.user.is_staff else request.user
-        summary = OpsService.overview(owner=owner)
+        project = None
+        project_id = request.query_params.get("project_id")
+        if project_id:
+            project = Project.objects.filter(
+                id=project_id
+            ).first() if request.user.is_staff else Project.objects.filter(
+                id=project_id, memberships__user=request.user
+            ).first()
+        summary = OpsService.overview(owner=owner, project=project)
         if owner is None:
-            latest_leads = Lead.objects.select_related("account")[:5]
-            latest_tickets = Ticket.objects.select_related("account")[:5]
-            latest_queue = QueueItem.objects.all()[:5]
+            latest_leads = Lead.objects.select_related("account")
+            latest_tickets = Ticket.objects.select_related("account")
+            latest_queue = QueueItem.objects.all()
         else:
-            latest_leads = Lead.objects.filter(owner=owner).select_related("account")[:5]
-            latest_tickets = Ticket.objects.filter(owner=owner).select_related("account")[:5]
-            latest_queue = QueueItem.objects.filter(owner=owner)[:5]
+            latest_leads = Lead.objects.filter(owner=owner).select_related("account")
+            latest_tickets = Ticket.objects.filter(owner=owner).select_related("account")
+            latest_queue = QueueItem.objects.filter(owner=owner)
+        if project:
+            latest_leads = latest_leads.filter(project=project)
+            latest_tickets = latest_tickets.filter(project=project)
+            latest_queue = latest_queue.filter(project=project)
 
         return Response(
             {
                 **summary,
                 "recent": {
-                    "leads": LeadSerializer(latest_leads, many=True).data,
-                    "tickets": TicketSerializer(latest_tickets, many=True).data,
-                    "queue": QueueItemSerializer(latest_queue, many=True).data,
+                    "leads": LeadSerializer(latest_leads[:5], many=True).data,
+                    "tickets": TicketSerializer(latest_tickets[:5], many=True).data,
+                    "queue": QueueItemSerializer(latest_queue[:5], many=True).data,
                 },
             }
         )
