@@ -57,6 +57,8 @@ urlpatterns = [
     path('api/swarm/', include('apps.swarm_bridge.urls')),
     path('api/ops/', include('apps.ops.urls')),
     path('api/v1/', include('apps.notifications.urls')),
+    # Anas Sprint 1 — ops_core queue processor + project-scoped objects
+    path('api/ops-core/', include('apps.ops_core.urls')),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
