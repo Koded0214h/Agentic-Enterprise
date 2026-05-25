@@ -40,6 +40,8 @@ class ProjectSerializer(serializers.ModelSerializer):
     activity_count = serializers.SerializerMethodField()
     goal_count = serializers.SerializerMethodField()
     artifact_count = serializers.SerializerMethodField()
+    workflow_task_count = serializers.SerializerMethodField()
+    swarm_execution_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Project
@@ -54,3 +56,9 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     def get_artifact_count(self, obj):
         return obj.artifacts.count()
+
+    def get_workflow_task_count(self, obj):
+        return obj.workflow_tasks.count()
+
+    def get_swarm_execution_count(self, obj):
+        return obj.swarm_executions.count()
