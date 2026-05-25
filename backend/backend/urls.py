@@ -55,6 +55,9 @@ urlpatterns = [
     path('api/billing/', include('apps.billing.urls')),
     path('api/swarm/', include('apps.swarm_bridge.urls')),
     path('api/v1/', include('apps.notifications.urls')),
+    # Anas Sprint 1
+    path('api/projects/', include('apps.projects.urls')),
+    path('api/ops/', include('apps.ops_core.urls')),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]

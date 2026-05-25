@@ -40,6 +40,9 @@ INSTALLED_APPS = [
     "apps.billing",
     "apps.swarm_bridge",
     "apps.notifications",
+    # Anas Sprint 1 — project stub + ops core
+    "apps.projects",
+    "apps.ops_core",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -220,6 +223,11 @@ CELERY_BEAT_SCHEDULE = {
     "monthly-budget-reset": {
         "task": "apps.billing.tasks.reset_monthly_budgets",
         "schedule": crontab(minute=5, hour=0, day_of_month=1),
+    },
+    # Anas Sprint 1 — sweep pending/retrying queue items every minute
+    "ops-queue-sweep": {
+        "task": "apps.ops_core.tasks.process_queue",
+        "schedule": crontab(minute="*"),
     },
 }
 
