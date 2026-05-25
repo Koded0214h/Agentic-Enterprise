@@ -154,6 +154,13 @@ class Conversation(models.Model):
     """Track conversations between agents and users/other agents"""
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='conversations',
+    )
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='conversations')
     session_id = models.UUIDField(default=uuid.uuid4)
     
@@ -263,6 +270,13 @@ class WorkflowTask(models.Model):
     """Track long-running agent tasks and their dependencies."""
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='workflow_tasks',
+    )
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='tasks')
     description = models.TextField()
     
@@ -305,6 +319,13 @@ class TraceStep(models.Model):
     """Logs individual steps within a LangGraph execution for visualization."""
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='trace_steps',
+    )
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='traces')
     
     node_name = models.CharField(max_length=100)  # e.g., 'agent', 'tools', 'supervisor', 'Researcher'
@@ -331,6 +352,13 @@ class PendingAction(models.Model):
     """Actions that are paused and waiting for human approval."""
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pending_actions',
+    )
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='pending_actions')
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
     

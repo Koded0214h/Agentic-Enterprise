@@ -47,6 +47,7 @@ class SwarmPolicyCheckSerializer(serializers.Serializer):
         default=dict,
         help_text="Optional arbitrary context passed from the swarm orchestrator.",
     )
+    project_id = serializers.UUIDField(required=False, allow_null=True)
 
 
 class PolicyCheckResponseSerializer(serializers.Serializer):
@@ -84,6 +85,7 @@ class SwarmUsageReportSerializer(serializers.Serializer):
     duration_ms = serializers.IntegerField(min_value=0, default=0)
     success = serializers.BooleanField(default=True)
     error_message = serializers.CharField(required=False, allow_blank=True, default="")
+    project_id = serializers.UUIDField(required=False, allow_null=True)
 
 
 class SwarmTraceEventSerializer(serializers.Serializer):
@@ -106,6 +108,7 @@ class SwarmTraceEventSerializer(serializers.Serializer):
         help_text="Arbitrary structured data for this trace event.",
     )
     timestamp = serializers.DateTimeField(required=False, allow_null=True)
+    project_id = serializers.UUIDField(required=False, allow_null=True)
 
 
 class SwarmKBQuerySerializer(serializers.Serializer):

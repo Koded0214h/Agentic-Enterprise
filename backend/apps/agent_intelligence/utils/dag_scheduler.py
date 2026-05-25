@@ -145,6 +145,7 @@ class DAGScheduler:
 
                 conversation = Conversation.objects.create(
                     agent=agent,
+                    project=task.project,
                     title=f"DAG Task: {task.description[:50]}",
                     status="ACTIVE",
                     llm_config=agent.capability.primary_llm,
@@ -156,6 +157,7 @@ class DAGScheduler:
                     "messages": [{"role": "user", "content": prompt}],
                     "agent_id": str(agent.id),
                     "conversation_id": str(conversation.id),
+                    "project_id": str(task.project_id) if task.project_id else None,
                     "iterations": 0,
                     "max_iterations": capability.max_iterations,
                 }
@@ -177,6 +179,7 @@ class DAGScheduler:
                     resource_id=task.id,
                     compute_time_ms=duration_ms,
                     cost=0.002,
+                    project=task.project,
                 )
                 conversation.status = "COMPLETED"
                 conversation.save()

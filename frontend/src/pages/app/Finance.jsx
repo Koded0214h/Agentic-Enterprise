@@ -55,11 +55,12 @@ export default function Finance() {
 function Overview() {
   const [usage, setUsage] = useState([])
   const [budgets, setBudgets] = useState([])
+  const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all([finance.usage(), finance.budgets()])
-      .then(([u, b]) => { setUsage(u); setBudgets(b) })
+    Promise.all([finance.usage(), finance.budgets(), finance.summary()])
+      .then(([u, b, s]) => { setUsage(u); setBudgets(b); setSummary(s) })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
@@ -101,6 +102,11 @@ function Overview() {
           <span className="fin-kpi-val">{budgets.filter(b => b.is_active).length}</span>
           <span className="fin-kpi-sub">of {budgets.length} total</span>
         </div>
+        <div className="card fin-kpi">
+          <span className="fin-kpi-label">Estimated MRR</span>
+          <span className="fin-kpi-val">${parseFloat(summary?.estimated_mrr || 0).toFixed(2)}</span>
+          <span className="fin-kpi-sub">{summary?.invoice_summary?.paid_invoice_total ? `${summary.invoice_summary.paid_invoice_total.toFixed(2)} from paid invoices` : 'invoice-based estimate'}</span>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -132,6 +138,27 @@ function Overview() {
         </div>
 
         <div className="card">
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: 'var(--text-2)' }}>Finance snapshot</div>
+          {summary && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 16 }}>
+              <div className="fin-mini-card">
+                <span className="fin-kpi-label">Open invoices</span>
+                <span className="fin-kpi-val">{summary.invoice_summary?.open_invoice_count ?? 0}</span>
+              </div>
+              <div className="fin-mini-card">
+                <span className="fin-kpi-label">Over alert</span>
+                <span className="fin-kpi-val">{summary.budget_summary?.over_alert ?? 0}</span>
+              </div>
+              <div className="fin-mini-card">
+                <span className="fin-kpi-label">Over limit</span>
+                <span className="fin-kpi-val">{summary.budget_summary?.over_limit ?? 0}</span>
+              </div>
+              <div className="fin-mini-card">
+                <span className="fin-kpi-label">Usage records</span>
+                <span className="fin-kpi-val">{summary.usage_summary?.record_count ?? 0}</span>
+              </div>
+            </div>
+          )}
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: 'var(--text-2)' }}>Budget status</div>
           {loading ? (
             <FinEmpty icon={<RiWalletLine size={24} />} text="Loading budgets…" />

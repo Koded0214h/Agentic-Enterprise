@@ -6,6 +6,7 @@ from .views import (
     AgentBudgetViewSet,
     WorkflowCostSummaryView,
     UsageAlertsView,
+    FinanceOverviewView,
 )
 
 router = DefaultRouter()
@@ -15,6 +16,7 @@ router.register(r'budgets', AgentBudgetViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('overview/', FinanceOverviewView.as_view(), name='finance-overview'),
     path('workflow-costs/', WorkflowCostSummaryView.as_view(), name='workflow-costs'),
     path('usage-alerts/', UsageAlertsView.as_view(), name='usage-alerts'),
 ]

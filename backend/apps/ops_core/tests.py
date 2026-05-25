@@ -4,7 +4,6 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.agent_gateway.models import Workspace
 from apps.projects.models import Project
 from .models import (
     Account,
@@ -32,11 +31,9 @@ def make_user(username="testuser", password="testpass"):
 
 
 def make_project(owner, name="Test Project", slug="test-project"):
-    ws = Workspace.objects.create(name=f"{name} WS", slug=f"{slug}-ws", owner=owner)
     return Project.objects.create(
         name=name,
         slug=slug,
-        workspace=ws,
         owner=owner,
     )
 

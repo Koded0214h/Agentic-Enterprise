@@ -24,6 +24,8 @@ AOS is the infrastructure layer that sits above AI agent frameworks. It does not
 | [Security](./docs/security.md) | Auth, RBAC, encryption, production cautions |
 | [Configuration](./docs/configuration.md) | All environment variables and settings |
 | [Contributing](./docs/contributing.md) | Adding agents, skills, API modules |
+| [My Docs](./docs/my-docs/index.md) | Project-based startup model, autonomy gaps, implementation plan |
+| [Koded Master Plan](./koded-master-plan.md) | Root plan for the Koded startup operating model |
 
 ---
 

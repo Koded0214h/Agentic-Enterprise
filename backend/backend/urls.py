@@ -52,12 +52,13 @@ urlpatterns = [
     path('api/policies/', include('apps.policy_engine.urls')),
     path('api/intelligence/', include('apps.agent_intelligence.urls')),
     path('api/knowledge/', include('apps.knowledge_base.urls')),
+    path('api/projects/', include('apps.projects.urls')),
     path('api/billing/', include('apps.billing.urls')),
     path('api/swarm/', include('apps.swarm_bridge.urls')),
+    path('api/ops/', include('apps.ops.urls')),
     path('api/v1/', include('apps.notifications.urls')),
-    # Anas Sprint 1
-    path('api/projects/', include('apps.projects.urls')),
-    path('api/ops/', include('apps.ops_core.urls')),
+    # Anas Sprint 1 — ops_core queue processor + project-scoped objects
+    path('api/ops-core/', include('apps.ops_core.urls')),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]

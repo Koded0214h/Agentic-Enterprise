@@ -37,11 +37,12 @@ INSTALLED_APPS = [
     "apps.policy_engine",
     "apps.agent_intelligence",
     "apps.knowledge_base",
+    "apps.projects",
     "apps.billing",
     "apps.swarm_bridge",
+    "apps.ops",
     "apps.notifications",
-    # Anas Sprint 1 — project stub + ops core
-    "apps.projects",
+    # Anas Sprint 1 — queue processor + project-scoped ops objects
     "apps.ops_core",
     "django.contrib.admin",
     "django.contrib.auth",

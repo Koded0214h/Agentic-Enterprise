@@ -78,6 +78,13 @@ class Policy(models.Model):
     Core Policy model - defines who can do what under which conditions.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='policies',
+    )
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True)
     
@@ -197,6 +204,13 @@ class PolicyAuditLog(models.Model):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='policy_audit_logs',
+    )
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="policy_logs")
     policy = models.ForeignKey(Policy, on_delete=models.SET_NULL, null=True)
     

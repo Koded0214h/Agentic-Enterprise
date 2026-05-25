@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: freelance-tracker-backend
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
+    healthCheckPath: /health # Assuming a /health endpoint in your FastAPI app
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: 
+          name: freelance-tracker-db
+          property: connectionString
+      - key: REDIS_URL
+        fromCache: 
+          name: freelance-tracker-redis
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true # Render will generate a secure secret key
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: "*" # IMPORTANT: Restrict this to your actual domain(s) in production
+    autoDeploy: true
+    # Scaling (optional, adjust as needed)
+    # numInstances: 1
+    # disk: 
+    #   name: backend-data
+    #   sizeGB: 1
+
+  - type: pserv
+    name: freelance-tracker-db
+    env: postgres
+    ipAllowList: [] # Only allow internal connections
+    plan: starter # Or 'standard' for more robust needs
+
+  - type: pserv
+    name: freelance-tracker-redis
+    env: redis
+    ipAllowList: [] # Only allow internal connections
+    plan: starter # Or 'standard' for more robust needs

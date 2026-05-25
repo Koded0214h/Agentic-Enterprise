@@ -266,82 +266,34 @@ class AnthropicProvider(LLMProvider):
 
 class GeminiProvider(LLMProvider):
     """
-    Google Gemini provider.
+    Google Gemini provider via the google.genai SDK (v1.x, non-deprecated).
 
-    Uses the deprecated `google.generativeai` SDK because it's already in
-    requirements.txt. Wraps every sync call in asyncio.to_thread so we don't
-    block the event loop (the previous version did, which is why a Gemini run
-    sometimes hung for 10+ seconds before failing).
-
-    Safety filters, empty candidates, and exception bubbles are all caught
-    and surfaced as LLMResponse(stop_reason='error') with a clear message,
-    so the orchestrator sees a clean per-node error instead of crashing the
-    whole DAG.
+    Wraps every sync call in asyncio.to_thread so we don't block the event loop.
+    Safety filters, empty candidates, and exceptions are caught and surfaced as
+    LLMResponse(stop_reason='error') so the orchestrator gets a clean per-node
+    error instead of crashing the whole DAG.
     """
 
-    # Fallback list when the requested model name is unrecognised / quota'd.
-    # Ordered newest → cheapest stable. The v1beta API only exposes the 2.5
-    # family on most accounts; 2.0 and 1.5 names return 404 NotFound.
     _MODEL_FALLBACKS = [
         "gemini-2.5-flash",
         "gemini-2.5-flash-lite",
-        "gemini-2.5-pro",
-        "gemini-2.0-flash",       # last-resort fallbacks for older accounts
-        "gemini-1.5-flash-latest",
     ]
 
     def __init__(self, model: str = "gemini-2.5-flash", api_key: str = ""):
         super().__init__(model)
         try:
-            import google.generativeai as genai
+            import google.genai as genai
+            import google.genai.types as genai_types
         except ImportError as exc:
-            raise RuntimeError("google-generativeai not installed — pip install google-generativeai") from exc
+            raise RuntimeError("google-genai not installed — pip install google-genai") from exc
 
         resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
         if not resolved_key:
             raise RuntimeError(
                 "GEMINI_API_KEY is not set. Get one at https://aistudio.google.com/app/apikey"
             )
-        genai.configure(api_key=resolved_key)
-        self._genai = genai
-
-    @staticmethod
-    def _extract_text(response) -> str:
-        """Pull text out of a Gemini response even if .text raises (blocked / no candidates)."""
-        try:
-            txt = getattr(response, "text", None)
-            if txt:
-                return txt
-        except Exception:
-            pass
-        # Fall back to scanning candidates / parts
-        try:
-            for cand in getattr(response, "candidates", []) or []:
-                parts = getattr(getattr(cand, "content", None), "parts", []) or []
-                for p in parts:
-                    if getattr(p, "text", None):
-                        return p.text
-        except Exception:
-            pass
-        return ""
-
-    @staticmethod
-    def _block_reason(response) -> str:
-        """Return a human-readable reason if Gemini blocked / refused the response."""
-        try:
-            pf = getattr(response, "prompt_feedback", None)
-            if pf and getattr(pf, "block_reason", None):
-                return f"prompt_blocked:{pf.block_reason}"
-        except Exception:
-            pass
-        try:
-            for cand in getattr(response, "candidates", []) or []:
-                finish = getattr(cand, "finish_reason", None)
-                if finish and str(finish) not in ("STOP", "FinishReason.STOP", "1"):
-                    return f"finish_reason:{finish}"
-        except Exception:
-            pass
-        return ""
+        self._client = genai.Client(api_key=resolved_key)
+        self._genai_types = genai_types
 
     async def complete(
         self,
@@ -352,66 +304,177 @@ class GeminiProvider(LLMProvider):
         temperature: float = 0.0,
     ) -> LLMResponse:
         import asyncio
-        # Flatten messages into a single prompt; Gemini doesn't have a tool/role
-        # protocol that maps cleanly onto our schema yet.
-        prompt = "\n\n".join(
-            f"{m.role.upper()}:\n{m.content}" for m in messages if m.content
-        ) or "Please respond."
 
-        # Trim absurdly long system prompts — Gemini Flash has ~1M token context
-        # but the request body limit is more conservative.
-        sys_trimmed = system if len(system) < 200_000 else (system[:200_000] + "\n\n[…system prompt truncated…]")
+        GT = self._genai_types
+        contents = self._build_contents(messages, GT)
+        gemini_tools, name_map = self._build_tools(tools, GT) if tools else (None, {})
+        sys_trimmed = system if len(system) < 200_000 else (system[:200_000] + "\n\n[…truncated…]")
 
         last_err = ""
-        # Try the configured model, then fall through to known-good fallbacks.
         candidates = [self.model] + [m for m in self._MODEL_FALLBACKS if m != self.model]
         for model_name in candidates:
             try:
                 response = await asyncio.to_thread(
-                    self._sync_generate, model_name, sys_trimmed, prompt, max_tokens, temperature
+                    self._sync_generate,
+                    model_name, sys_trimmed, contents, gemini_tools, max_tokens, temperature,
                 )
-                text = self._extract_text(response)
-                block = self._block_reason(response)
-                if not text and block:
-                    last_err = f"Gemini ({model_name}) returned no text: {block}"
+
+                cands = getattr(response, "candidates", None) or []
+                if not cands:
+                    last_err = f"Gemini ({model_name}) returned no candidates"
                     continue
+
+                cand = cands[0]
+                parts = getattr(getattr(cand, "content", None), "parts", None) or []
+
+                # Extract function calls if present
+                fc_parts = [p for p in parts if getattr(p, "function_call", None)]
+                text_parts = [p for p in parts if getattr(p, "text", None)]
+                text = "".join(p.text for p in text_parts if p.text)
+
+                if fc_parts:
+                    tool_calls = [
+                        ToolCall(
+                            # id = safe_name (what Gemini knows) for function_response round-trips
+                            id=p.function_call.name,
+                            # name = original tool name (what ToolRegistry is keyed on)
+                            name=name_map.get(p.function_call.name, p.function_call.name),
+                            input=dict(p.function_call.args or {}),
+                        )
+                        for p in fc_parts
+                    ]
+                    usage = getattr(response, "usage_metadata", None)
+                    return LLMResponse(
+                        content=text,
+                        stop_reason="tool_use",
+                        tool_calls=tool_calls,
+                        tokens_input=getattr(usage, "prompt_token_count", 0) if usage else 0,
+                        tokens_output=getattr(usage, "candidates_token_count", 0) if usage else 0,
+                        model=model_name,
+                    )
+
+                # No function calls — plain text response
                 if not text:
-                    last_err = f"Gemini ({model_name}) returned an empty response"
+                    fr = str(getattr(cand, "finish_reason", ""))
+                    last_err = (
+                        f"Gemini ({model_name}) stopped: {fr}"
+                        if fr and fr not in ("STOP", "FinishReason.STOP", "1")
+                        else f"Gemini ({model_name}) returned empty text"
+                    )
                     continue
 
-                # Pull token usage if available
                 usage = getattr(response, "usage_metadata", None)
-                tin = getattr(usage, "prompt_token_count", 0) if usage else 0
-                tout = getattr(usage, "candidates_token_count", 0) if usage else 0
-
                 return LLMResponse(
                     content=text,
                     stop_reason="end_turn",
-                    tokens_input=tin,
-                    tokens_output=tout,
+                    tokens_input=getattr(usage, "prompt_token_count", 0) if usage else 0,
+                    tokens_output=getattr(usage, "candidates_token_count", 0) if usage else 0,
                     model=model_name,
                 )
             except Exception as exc:
                 last_err = f"{model_name} → {type(exc).__name__}: {exc}"
                 continue
 
-        # All models failed — return a clean error response so the orchestrator
-        # surfaces a useful message instead of a stack trace.
         return LLMResponse(
             content=f"[Gemini error: {last_err}]",
             stop_reason="error",
             model=self.model,
         )
 
-    def _sync_generate(self, model_name: str, system: str, prompt: str, max_tokens: int, temperature: float):
-        """The actual sync call — invoked via asyncio.to_thread so it doesn't block."""
-        gen_config = {"max_output_tokens": max_tokens, "temperature": temperature}
-        model = self._genai.GenerativeModel(
-            model_name=model_name,
+    @staticmethod
+    def _build_contents(messages: list[Message], GT) -> list:
+        """Convert Message objects → Gemini Content list for multi-turn conversation."""
+        contents = []
+        for m in messages:
+            if m.role == "user" and m.content:
+                contents.append(GT.Content(
+                    role="user",
+                    parts=[GT.Part.from_text(text=m.content)],
+                ))
+            elif m.role == "assistant":
+                parts = []
+                if m.content:
+                    parts.append(GT.Part.from_text(text=m.content))
+                for tc in (m.tool_calls or []):
+                    # Use tc.id (the safe name Gemini knows) not tc.name (original with dots)
+                    parts.append(GT.Part.from_function_call(name=tc.id, args=tc.input or {}))
+                if parts:
+                    contents.append(GT.Content(role="model", parts=parts))
+            elif m.role == "tool":
+                parts = []
+                for tr in (m.tool_results or []):
+                    # tool_call_id == function name (we set id=name when extracting calls)
+                    parts.append(GT.Part.from_function_response(
+                        name=tr.tool_call_id,
+                        response={"result": tr.content, "is_error": tr.is_error},
+                    ))
+
+                if parts:
+                    contents.append(GT.Content(role="user", parts=parts))
+
+        if not contents:
+            contents = [GT.Content(role="user", parts=[GT.Part.from_text("Please respond.")])]
+        return contents
+
+    @staticmethod
+    def _build_tools(tools: list[ToolSchema], GT) -> tuple[list, dict]:
+        """Convert ToolSchema list → (Gemini Tool objects, safe_name→original_name map).
+
+        Gemini function names must be alphanumeric + underscores only.
+        We sanitize dots (e.g. "file.write" → "file_write") and return a reverse
+        map so the caller can restore original names when Gemini fires a function call.
+        """
+        def _schema(obj) -> object:
+            if not isinstance(obj, dict):
+                return obj
+            type_map = {
+                "object": "OBJECT", "string": "STRING", "integer": "INTEGER",
+                "number": "NUMBER", "boolean": "BOOLEAN", "array": "ARRAY",
+            }
+            kwargs = {}
+            if "type" in obj:
+                kwargs["type"] = type_map.get(obj["type"], obj["type"].upper())
+            if "description" in obj:
+                kwargs["description"] = obj["description"]
+            if "properties" in obj:
+                kwargs["properties"] = {k: _schema(v) for k, v in obj["properties"].items()}
+            if "required" in obj:
+                kwargs["required"] = obj["required"]
+            if "items" in obj:
+                kwargs["items"] = _schema(obj["items"])
+            return GT.Schema(**kwargs)
+
+        declarations = []
+        name_map: dict[str, str] = {}  # safe_name → original_name
+        for t in tools:
+            safe_name = t.name.replace(".", "_")
+            name_map[safe_name] = t.name
+            try:
+                declarations.append(GT.FunctionDeclaration(
+                    name=safe_name,
+                    description=t.description,
+                    parameters=_schema(t.parameters),
+                ))
+            except Exception:
+                pass  # skip malformed schemas
+        gemini_tools = [GT.Tool(function_declarations=declarations)] if declarations else []
+        return gemini_tools, name_map
+
+    def _sync_generate(self, model_name: str, system: str, contents: list,
+                       tools: list | None, max_tokens: int, temperature: float):
+        cfg_kwargs: dict = dict(
             system_instruction=system,
-            generation_config=gen_config,
+            max_output_tokens=max_tokens,
+            temperature=temperature,
         )
-        return model.generate_content(prompt)
+        if tools:
+            cfg_kwargs["tools"] = tools
+        config = self._genai_types.GenerateContentConfig(**cfg_kwargs)
+        return self._client.models.generate_content(
+            model=model_name,
+            contents=contents,
+            config=config,
+        )
 
     async def stream(
         self,
@@ -693,7 +756,7 @@ _DEFAULT_ROUTING = ("anthropic", "claude-sonnet-4-6")
 
 # Fallback chain per provider — tried in order if primary fails
 _FALLBACK_CHAIN: dict[str, list[tuple[str, str]]] = {
-    "anthropic": [("openai", "gpt-4o"), ("gemini", "gemini-2.0-flash")],
+    "anthropic": [("openai", "gpt-4o"), ("gemini", "gemini-2.5-flash")],
     "openai":    [("anthropic", "claude-sonnet-4-6"), ("mistral", "mistral-large-latest")],
     "gemini":    [("anthropic", "claude-sonnet-4-6")],
     "mistral":   [("anthropic", "claude-sonnet-4-6")],

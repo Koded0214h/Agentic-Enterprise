@@ -31,7 +31,10 @@ class PolicyViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Policy.objects.all()
+        project_id = self.request.query_params.get('project_id')
         workspace_id = self.request.query_params.get('workspace_id')
+        if project_id:
+            qs = qs.filter(dj_models.Q(project_id=project_id) | dj_models.Q(project__isnull=True))
         if workspace_id:
             qs = qs.filter(
                 dj_models.Q(workspace_id=workspace_id) | dj_models.Q(workspace__isnull=True)
@@ -64,11 +67,18 @@ class PolicyViewSet(viewsets.ModelViewSet):
         
         # Only consider this single policy
         evaluator.applicable_policies = [policy]
+        if serializer.validated_data.get('project_id'):
+            request_context = {
+                **serializer.validated_data.get('context', {}),
+                'project_id': serializer.validated_data['project_id'],
+            }
+        else:
+            request_context = serializer.validated_data.get('context', {})
         
         decision, _, reason = evaluator.evaluate(
             resource=serializer.validated_data['resource'],
             action=serializer.validated_data['action'],
-            context=serializer.validated_data.get('context', {})
+            context=request_context,
         )
         
         return Response({
@@ -144,6 +154,7 @@ class PolicyCheckView(views.APIView):
         resource = request.data.get('resource')
         action = request.data.get('action')
         context = request.data.get('context', {})
+        project_id = request.data.get('project_id')
         
         try:
             agent = Agent.objects.get(id=agent_id, owner=request.user)
@@ -153,6 +164,9 @@ class PolicyCheckView(views.APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         
+        if project_id:
+            context = {**context, "project_id": project_id}
+
         evaluator = PolicyEvaluator(agent)
         decision, policy, reason = evaluator.evaluate(resource, action, context)
         

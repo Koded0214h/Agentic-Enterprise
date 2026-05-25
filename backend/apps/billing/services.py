@@ -16,7 +16,7 @@ class BudgetExceededError(Exception):
 class BillingService:
 
     @staticmethod
-    def check_budget(agent, estimated_cost: float = 0.0) -> None:
+    def check_budget(agent, estimated_cost: float = 0.0, project=None) -> None:
         """
         Hard-block execution if agent or its department is over budget.
         Raises BudgetExceededError if limit is exceeded.
@@ -58,14 +58,27 @@ class BillingService:
                         budget=dept_budget,
                     )
 
+        if project is not None:
+            project_budget = AgentBudget.objects.filter(project=project, is_active=True).first()
+            if project_budget:
+                projected = project_budget.current_month_spend + cost
+                if projected > project_budget.monthly_limit:
+                    raise BudgetExceededError(
+                        f"Project '{project.name}' would exceed monthly budget "
+                        f"(${project_budget.current_month_spend:.4f} + ${cost:.4f} "
+                        f"> ${project_budget.monthly_limit:.2f})",
+                        budget=project_budget,
+                    )
+
     @staticmethod
     def record_usage(agent, resource_type, resource_id, tokens_input=0, tokens_output=0,
-                     compute_time_ms=0, cost=0.0):
+                     compute_time_ms=0, cost=0.0, project=None):
         """Record a single usage event and update budgets."""
         try:
             department = agent.department
             record = UsageRecord.objects.create(
                 agent=agent,
+                project=project,
                 department=department,
                 tokens_input=tokens_input,
                 tokens_output=tokens_output,
@@ -75,6 +88,8 @@ class BillingService:
                 resource_type=resource_type,
             )
             BillingService._update_budget(agent=agent, cost=cost)
+            if project:
+                BillingService._update_budget(project=project, cost=cost)
             if department:
                 BillingService._update_budget(department=department, cost=cost)
             return record
@@ -83,7 +98,7 @@ class BillingService:
             return None
 
     @staticmethod
-    def _update_budget(agent=None, cost: float = 0.0, department=None):
+    def _update_budget(agent=None, cost: float = 0.0, department=None, project=None):
         from django.db.models import F
         cost = Decimal(str(cost))
         if agent:
@@ -94,11 +109,15 @@ class BillingService:
             AgentBudget.objects.filter(department=department, is_active=True).update(
                 current_month_spend=F("current_month_spend") + cost
             )
+        elif project:
+            AgentBudget.objects.filter(project=project, is_active=True).update(
+                current_month_spend=F("current_month_spend") + cost
+            )
 
     # Legacy public alias kept for compatibility
     @staticmethod
-    def update_budget(agent=None, cost=0.0, department=None):
-        BillingService._update_budget(agent=agent, cost=cost, department=department)
+    def update_budget(agent=None, cost=0.0, department=None, project=None):
+        BillingService._update_budget(agent=agent, cost=cost, department=department, project=project)
 
     @staticmethod
     def reset_monthly_budgets():
@@ -114,13 +133,15 @@ class BillingService:
         return updated
 
     @staticmethod
-    def get_usage_summary(agent_id=None, department_id=None, start_date=None, end_date=None):
+    def get_usage_summary(agent_id=None, department_id=None, start_date=None, end_date=None, project_id=None):
         from django.db.models import Sum, Count
         query = UsageRecord.objects.all()
         if agent_id:
             query = query.filter(agent_id=agent_id)
         if department_id:
             query = query.filter(department_id=department_id)
+        if project_id:
+            query = query.filter(project_id=project_id)
         if start_date:
             query = query.filter(created_at__gte=start_date)
         if end_date:

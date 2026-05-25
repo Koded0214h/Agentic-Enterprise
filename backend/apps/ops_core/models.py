@@ -23,7 +23,7 @@ class Account(models.Model):
     project = models.ForeignKey(
         "projects.Project",
         on_delete=models.CASCADE,
-        related_name="accounts",
+        related_name="oc_accounts",
     )
     name = models.CharField(max_length=255)
     domain = models.CharField(max_length=255, blank=True)
@@ -71,14 +71,14 @@ class Lead(models.Model):
     project = models.ForeignKey(
         "projects.Project",
         on_delete=models.CASCADE,
-        related_name="leads",
+        related_name="oc_leads",
     )
     account = models.ForeignKey(
         Account,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="leads",
+        related_name="oc_leads",
     )
     email = models.EmailField()
     first_name = models.CharField(max_length=100, blank=True)
@@ -136,21 +136,21 @@ class Opportunity(models.Model):
     project = models.ForeignKey(
         "projects.Project",
         on_delete=models.CASCADE,
-        related_name="opportunities",
+        related_name="oc_opportunities",
     )
     account = models.ForeignKey(
         Account,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="opportunities",
+        related_name="oc_opportunities",
     )
     lead = models.ForeignKey(
         Lead,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="opportunities",
+        related_name="oc_opportunities",
     )
     name = models.CharField(max_length=255)
     stage = models.CharField(
@@ -218,21 +218,21 @@ class Ticket(models.Model):
     project = models.ForeignKey(
         "projects.Project",
         on_delete=models.CASCADE,
-        related_name="tickets",
+        related_name="oc_tickets",
     )
     account = models.ForeignKey(
         Account,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="tickets",
+        related_name="oc_tickets",
     )
     lead = models.ForeignKey(
         Lead,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="tickets",
+        related_name="oc_tickets",
     )
     subject = models.CharField(max_length=500)
     body = models.TextField(blank=True)
@@ -308,28 +308,28 @@ class Touchpoint(models.Model):
     project = models.ForeignKey(
         "projects.Project",
         on_delete=models.CASCADE,
-        related_name="touchpoints",
+        related_name="oc_touchpoints",
     )
     account = models.ForeignKey(
         Account,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="touchpoints",
+        related_name="oc_touchpoints",
     )
     lead = models.ForeignKey(
         Lead,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="touchpoints",
+        related_name="oc_touchpoints",
     )
     ticket = models.ForeignKey(
         Ticket,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="touchpoints",
+        related_name="oc_touchpoints",
     )
     type = models.CharField(max_length=20, choices=TouchpointType.choices)
     direction = models.CharField(
@@ -393,7 +393,7 @@ class QueueItem(models.Model):
     project = models.ForeignKey(
         "projects.Project",
         on_delete=models.CASCADE,
-        related_name="queue_items",
+        related_name="oc_queue_items",
     )
     item_type = models.CharField(max_length=30, choices=QueueItemType.choices)
     status = models.CharField(

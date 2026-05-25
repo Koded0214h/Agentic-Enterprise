@@ -77,3 +77,4 @@ class PolicyEvaluateSerializer(serializers.Serializer):
     resource = serializers.ChoiceField(choices=[r[0] for r in PolicyResource.choices])
     action = serializers.CharField(max_length=50)
     context = serializers.JSONField(required=False, default=dict)
+    project_id = serializers.UUIDField(required=False, allow_null=True)

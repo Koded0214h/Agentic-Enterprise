@@ -1,6 +1,10 @@
 import { api } from './client'
 
 export const finance = {
+  summary: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return api.get(`/billing/overview/${qs ? '?' + qs : ''}`)
+  },
   usage: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return api.get(`/billing/usage/${qs ? '?' + qs : ''}`)

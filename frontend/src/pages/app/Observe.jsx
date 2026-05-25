@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   RiEyeLine, RiRadioButtonLine, RiFileSearchLine, RiAlertLine, RiShieldLine,
-  RiCheckLine, RiCloseLine, RiTimeLine, RiRefreshLine, RiArrowRightSLine,
-  RiPulseLine, RiErrorWarningLine, RiInformationLine, RiBarChart2Line,
-  RiLineChartLine, RiListCheck2, RiSpeedLine, RiFlowChart, RiShareLine,
+  RiCheckLine, RiCloseLine, RiRefreshLine,
+  RiErrorWarningLine, RiInformationLine, RiBarChart2Line,
+  RiLineChartLine, RiListCheck2, RiSpeedLine, RiFlowChart,
 } from 'react-icons/ri'
 import { observe } from '../../api/observe'
-import { agents as agentsAPI } from '../../api/agents'
 import { api } from '../../api/client'
 import './Observe.css'
 
@@ -34,7 +33,11 @@ function timeAgo(ts) {
 }
 
 export default function Observe() {
-  const [tab, setTab] = useState('feed')
+  const [tab, setTab] = useState(() => {
+    // Auto-open Live Monitor when linked from a template launch
+    const params = new URLSearchParams(window.location.search)
+    return params.get('execution') ? 'live' : 'feed'
+  })
 
   return (
     <div>
@@ -187,176 +190,182 @@ const EVENT_LABEL = {
   'trace.step':        { label: 'Trace step',       color: 'var(--text-muted)' },
 }
 
+const TEMPLATE_META = {
+  'saas-mvp-72h':    { label: 'MVP',  color: 'var(--accent)' },
+  'launch-and-grow': { label: 'GTM',  color: '#f59e0b' },
+}
+
+function fmtDuration(s) {
+  if (s == null) return null
+  if (s < 60) return `${s}s`
+  return `${Math.floor(s / 60)}m ${s % 60}s`
+}
+
+function RunCard({ run, selected, onClick }) {
+  const tpl = TEMPLATE_META[run.template_id] || { label: run.template_id || 'RUN', color: 'var(--text)' }
+  const isCompleted = run.status === 'completed'
+  const isFailed = run.status === 'failed'
+  const isRunning = run.status === 'running'
+  const statusColor = isCompleted ? 'var(--green)' : isFailed ? 'var(--red)' : 'var(--accent)'
+  const dur = fmtDuration(run.duration_s)
+
+  return (
+    <div
+      className="obs-run-card"
+      style={{ borderLeft: `3px solid ${selected ? tpl.color : 'transparent'}`, background: selected ? 'var(--surface-2)' : '' }}
+      onClick={onClick}
+    >
+      <div className="obs-run-card-top">
+        <span className="obs-run-badge" style={{ background: `${tpl.color}18`, color: tpl.color, border: `1px solid ${tpl.color}30` }}>
+          {tpl.label}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>{timeAgo(run.started_at)}</span>
+      </div>
+      <div className="obs-run-idea">{run.task_summary || 'No description'}</div>
+      <div className="obs-run-meta">
+        <span className="obs-run-status-dot" style={{ background: statusColor }} />
+        <span style={{ fontSize: 11, color: statusColor, fontWeight: 600 }}>{run.status}</span>
+        {dur && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>· {dur}</span>}
+      </div>
+    </div>
+  )
+}
+
+function EventRow({ ev }) {
+  const meta = EVENT_LABEL[ev.event_type] || { label: ev.event_type, color: 'var(--text-muted)' }
+  const node = ev.payload?.node
+  const hasError = !!ev.payload?.error
+  const hasTokens = ev.payload?.tokens_in > 0
+  const durSec = ev.duration_ms != null ? (ev.duration_ms >= 1000 ? `${(ev.duration_ms / 1000).toFixed(1)}s` : `${ev.duration_ms}ms`) : null
+
+  return (
+    <div className={`obs-event-row ${hasError ? 'obs-event-row--error' : ''}`}>
+      <span className="obs-event-type" style={{ color: meta.color }}>{meta.label}</span>
+      <div className="obs-event-body">
+        {node && <span className="obs-event-node">{node}</span>}
+        <span className="obs-event-meta">
+          {durSec && <span>{durSec}</span>}
+          {ev.payload?.output_length > 0 && <span>{ev.payload.output_length.toLocaleString()} chars</span>}
+          {hasTokens && <span>{ev.payload.tokens_in.toLocaleString()}↑ {ev.payload.tokens_out.toLocaleString()}↓ tok</span>}
+          {hasError && <span className="obs-event-error">⚠ {ev.payload.error}</span>}
+        </span>
+      </div>
+      <span className="obs-event-time">{ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}</span>
+    </div>
+  )
+}
+
 function LiveMonitor() {
-  const [tasks, setTasks] = useState([])
-  const [agents, setAgents] = useState([])
+  const [runs, setRuns] = useState([])
   const [loading, setLoading] = useState(true)
-  const [selectedExec, setSelectedExec] = useState(null)
+  const [selectedRun, setSelectedRun] = useState(null)
   const [liveEvents, setLiveEvents] = useState([])
   const [streaming, setStreaming] = useState(false)
   const esRef = useRef(null)
   const feedRef = useRef(null)
 
-  const refresh = useCallback(() => {
-    Promise.all([
-      observe.tasks({ status: 'IN_PROGRESS' }),
-      agentsAPI.list(),
-    ]).then(([t, a]) => {
-      setTasks(t.results || [])
-      const arr = Array.isArray(a) ? a : (a.results || [])
-      setAgents(arr.filter(ag => ag.status === 'RUNNING'))
-    }).catch(() => {}).finally(() => setLoading(false))
+  const loadRuns = useCallback(() => {
+    observe.recentRuns('template')
+      .then(d => setRuns((d?.results || []).filter(r => r.template_id)))
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
-    refresh()
-    const id = setInterval(refresh, 5000)
+    loadRuns()
+    const id = setInterval(loadRuns, 10000)
     return () => clearInterval(id)
-  }, [refresh])
+  }, [loadRuns])
 
-  const openStream = useCallback((executionId) => {
-    if (esRef.current) esRef.current.close()
-    setSelectedExec(executionId)
+  const loadReplay = useCallback((run) => {
+    esRef.current?.close()
+    setSelectedRun(run)
     setLiveEvents([])
-    setStreaming(true)
-
-    esRef.current = observe.streamExecution(
-      executionId,
-      (event) => {
-        setLiveEvents(prev => {
-          const next = [...prev, event].slice(-200) // keep last 200 events
-          return next
-        })
-        // auto-scroll feed
+    setStreaming(false)
+    observe.executionReplay(run.id)
+      .then((data) => {
+        const events = Array.isArray(data?.events) ? data.events : []
+        setLiveEvents(events)
         requestAnimationFrame(() => {
           if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight
         })
-      },
-      () => setStreaming(false),
-      () => setStreaming(false),
-    )
+      })
+      .catch(() => {
+        esRef.current = observe.streamExecution(
+          run.id,
+          (ev) => setLiveEvents(prev => [...prev, ev].slice(-200)),
+          () => setStreaming(false),
+          () => setStreaming(false),
+        )
+        setStreaming(true)
+      })
+  }, [])
+
+  // Auto-open from ?execution= query param
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const execId = params.get('execution')
+    if (execId) {
+      loadReplay({ id: execId, task_summary: '', template_id: '' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => () => esRef.current?.close(), [])
 
-  // If we landed here with ?execution=<id>, auto-open replay for that run.
-  // This is what the "Open in Observe →" button on the templates modal sends.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const execId = params.get('execution')
-    if (execId && execId !== selectedExec) {
-      setSelectedExec(execId)
-      setLiveEvents([])
-      setStreaming(false)
-      // Try the replay endpoint first (works for completed runs);
-      // fall back to live stream if replay 404s (still-running run).
-      observe.executionReplay(execId)
-        .then((data) => {
-          const events = Array.isArray(data?.events) ? data.events : (Array.isArray(data) ? data : [])
-          setLiveEvents(events.slice(-200))
-          requestAnimationFrame(() => {
-            if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight
-          })
-        })
-        .catch(() => {
-          // Replay not available — fall back to live SSE stream
-          openStream(execId)
-        })
-    }
-    // We only want this on initial mount / when the URL changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: selectedExec ? '1fr 1fr' : '1fr', gap: 16 }}>
-      {/* Agent / task list */}
+    <div style={{ display: 'grid', gridTemplateColumns: selectedRun ? '320px 1fr' : '1fr', gap: 16, alignItems: 'start' }}>
+      {/* Recent Runs panel */}
       <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="dot dot-green dot-pulse" style={{ width: 8, height: 8 }} />
-            <span style={{ fontSize: 12, color: 'var(--text)' }}>Auto-refreshes every 5s</span>
-          </div>
-          <button className="btn btn-ghost btn-sm" onClick={refresh}><RiRefreshLine size={13} /> Refresh</button>
+        <div className="obs-panel-header">
+          <span className="obs-panel-title">Recent Template Runs</span>
+          <button className="btn btn-ghost btn-sm" onClick={loadRuns}><RiRefreshLine size={13} /></button>
         </div>
 
         {loading ? (
           <div className="obs-empty"><div className="aos-loader" style={{ minHeight: 'unset' }}><span /></div></div>
-        ) : agents.length === 0 && tasks.length === 0 ? (
-          <EmptyState icon={<RiRadioButtonLine size={32} />} text="No agents currently executing. Start a workflow to see live activity here." />
+        ) : runs.length === 0 ? (
+          <EmptyState icon={<RiRadioButtonLine size={32} />} text="No template runs yet. Launch a workflow from the Templates page." />
         ) : (
-          <div className="card" style={{ padding: 0 }}>
-            <table className="obs-live-table">
-              <thead>
-                <tr>
-                  <th>Agent</th>
-                  <th>Type</th>
-                  <th>Status</th>
-                  <th>Source</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {agents.map(a => (
-                  <tr key={a.id} style={{ cursor: a.execution_id ? 'pointer' : 'default', background: selectedExec === a.execution_id ? 'var(--surface-2)' : '' }}
-                      onClick={() => a.execution_id && openStream(a.execution_id)}>
-                    <td><div className="obs-live-agent">{a.name}</div></td>
-                    <td><span className="obs-live-mono">{a.agent_type}</span></td>
-                    <td>
-                      <span className="badge badge-green">
-                        <span className="dot dot-green dot-pulse" style={{ width: 6, height: 6 }} />
-                        running
-                      </span>
-                    </td>
-                    <td>{a.source}</td>
-                    <td>
-                      {a.execution_id && (
-                        <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); openStream(a.execution_id) }}>
-                          <RiPulseLine size={12} /> Stream
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="obs-run-list">
+            {runs.map(r => (
+              <RunCard
+                key={r.id}
+                run={r}
+                selected={selectedRun?.id === r.id}
+                onClick={() => loadReplay(r)}
+              />
+            ))}
           </div>
         )}
       </div>
 
-      {/* Live event feed — shown when an execution is selected */}
-      {selectedExec && (
-        <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column', maxHeight: 520 }}>
-          <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {/* Event feed — shown when a run is selected */}
+      {selectedRun && (
+        <div className="card obs-event-panel">
+          <div className="obs-event-panel-head">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {streaming && <span className="dot dot-green dot-pulse" style={{ width: 7, height: 7 }} />}
-              <span style={{ fontSize: 12, fontWeight: 600 }}>
-                {streaming ? 'Live stream' : 'Stream ended'} — {String(selectedExec).slice(0, 8)}
+              <span className="obs-panel-title">
+                {streaming ? 'Live' : 'Replay'} — {String(selectedRun.id).slice(0, 8)}
               </span>
+              {selectedRun.template_id && (
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{selectedRun.template_id}</span>
+              )}
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => { esRef.current?.close(); setSelectedExec(null); setLiveEvents([]) }}>
-              <RiCloseLine size={13} />
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', alignSelf: 'center' }}>{liveEvents.length} events</span>
+              <button className="btn btn-ghost btn-sm" onClick={() => { esRef.current?.close(); setSelectedRun(null); setLiveEvents([]) }}>
+                <RiCloseLine size={13} />
+              </button>
+            </div>
           </div>
-          <div ref={feedRef} style={{ overflowY: 'auto', flex: 1, padding: '8px 0' }}>
+          <div ref={feedRef} className="obs-event-feed">
             {liveEvents.length === 0 ? (
-              <div style={{ padding: 16, color: 'var(--text-muted)', fontSize: 12 }}>Waiting for events…</div>
-            ) : liveEvents.map((ev, i) => {
-              const meta = EVENT_LABEL[ev.event_type] || { label: ev.event_type, color: 'var(--text-muted)' }
-              return (
-                <div key={i} style={{ padding: '4px 14px', display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 12 }}>
-                  <span style={{ color: meta.color, fontWeight: 600, minWidth: 120, flexShrink: 0 }}>{meta.label}</span>
-                  <span style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: 11, wordBreak: 'break-all' }}>
-                    {ev.duration_ms != null ? `${ev.duration_ms}ms · ` : ''}
-                    {ev.payload?.tool || ev.payload?.node || ev.payload?.output_length != null ? `${ev.payload.output_length} chars` : ''}
-                    {ev.payload?.tokens_in ? ` · ${ev.payload.tokens_in}+${ev.payload.tokens_out} tok` : ''}
-                    {ev.payload?.error ? ` ⚠ ${ev.payload.error}` : ''}
-                  </span>
-                  <span style={{ color: 'var(--text-muted)', opacity: 0.5, marginLeft: 'auto', fontSize: 10, flexShrink: 0 }}>
-                    {ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : ''}
-                  </span>
-                </div>
-              )
-            })}
+              <div style={{ padding: '24px 16px', color: 'var(--text-muted)', fontSize: 12, textAlign: 'center' }}>
+                {streaming ? 'Waiting for events…' : 'No events recorded for this run.'}
+              </div>
+            ) : liveEvents.map((ev, i) => <EventRow key={i} ev={ev} />)}
           </div>
         </div>
       )}

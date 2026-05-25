@@ -88,3 +88,4 @@ class AgentExecuteSerializer(serializers.Serializer):
     agent_id = serializers.UUIDField()
     task = serializers.CharField(max_length=5000)
     context = serializers.JSONField(required=False, default=dict)
+    project_id = serializers.UUIDField(required=False, allow_null=True)

@@ -1,0 +1,11 @@
+Invoice ID: {invoice_id}
+Date: {created_at}
+
+Client Name: {client_name}
+Client Email: {client_email}
+
+Items:
+{items}
+Total Amount: {currency}{amount:.2f}
+Due Date: {due_date}
+Status: {status}

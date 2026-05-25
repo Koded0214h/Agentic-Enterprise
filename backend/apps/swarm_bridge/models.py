@@ -32,6 +32,15 @@ class SwarmEnvironment(models.TextChoices):
     PROD = "prod", _("Production")
 
 
+class SwarmExecutionStatus(models.TextChoices):
+    PENDING = "pending", _("Pending")
+    RUNNING = "running", _("Running")
+    COMPLETED = "completed", _("Completed")
+    FAILED = "failed", _("Failed")
+    CANCELLED = "cancelled", _("Cancelled")
+    DENIED = "denied", _("Denied by policy")
+
+
 class SwarmExecutionContext(models.Model):
     """
     Every agent-swarm execution that passes through the AOS bridge gets
@@ -40,6 +49,13 @@ class SwarmExecutionContext(models.Model):
     usage records, and trace steps.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='swarm_executions',
+    )
 
     # Identity
     aos_agent = models.ForeignKey(
@@ -80,6 +96,18 @@ class SwarmExecutionContext(models.Model):
         help_text=_("Brief description of the task dispatched to this agent"),
     )
 
+    # Native run stream/state for /api/swarm/run/*
+    run_lines = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_("Durable line buffer for native run streaming and replay"),
+    )
+    run_exit_code = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text=_("Exit code for native runs, if applicable"),
+    )
+
     # Usage metrics (populated post-execution via /usage/report/)
     tokens_input = models.IntegerField(default=0)
     tokens_output = models.IntegerField(default=0)
@@ -96,6 +124,13 @@ class SwarmExecutionContext(models.Model):
     policy_reason = models.TextField(blank=True)
 
     # Lifecycle
+    status = models.CharField(
+        max_length=20,
+        choices=SwarmExecutionStatus.choices,
+        default=SwarmExecutionStatus.PENDING,
+        db_index=True,
+        help_text=_("Run lifecycle status — drives Observe stream and replay endpoint"),
+    )
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -106,6 +141,7 @@ class SwarmExecutionContext(models.Model):
             models.Index(fields=["swarm_agent_name", "created_at"]),
             models.Index(fields=["policy_decision", "created_at"]),
             models.Index(fields=["environment", "created_at"]),
+            models.Index(fields=["status", "created_at"]),
         ]
 
     def __str__(self):

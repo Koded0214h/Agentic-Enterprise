@@ -27,7 +27,7 @@
 * [ ] Domain setup (aos-swarm.com) — `agentic-enterprise-smoky.vercel.app` is live, custom domain pending
 * [x] Error logging
 * [x] Health checks
-* [ ] Background worker monitoring
+* [x] Background worker monitoring
 * [x] CI/CD pipeline
 * [ ] Staging environment
 * [x] Production environment
@@ -177,7 +177,7 @@
 * [x] Approval voting system
 * [x] Risk scoring
 * [x] Recommendation summaries
-* [ ] Escalation handling
+* [x] Escalation handling
 * [x] Human override support
 
 ---
@@ -244,7 +244,7 @@
 * [x] Tool logging
 * [x] Tool retries
 * [x] Tool timeouts
-* [ ] Tool analytics
+* [x] Tool analytics
 
 ## MCP Integrations
 
@@ -304,7 +304,7 @@
 ## Vector Memory
 
 * [x] ChromaDB integration
-* [ ] Embedding generation
+* [x] Embedding generation
 * [x] Retrieval system
 * [x] Context injection
 * [x] Memory compression
@@ -317,8 +317,8 @@
 * [x] Memory viewer
 * [x] Memory search
 * [x] Memory deletion
-* [ ] Memory tagging
-* [ ] Retrieval logs
+* [x] Memory tagging
+* [x] Retrieval logs
 
 ---
 
@@ -336,13 +336,14 @@
 
 * [x] Live execution feed
 * [x] Agent activity feed
-* [ ] Workflow visualisation
+* [x] Workflow visualisation
 * [x] Token usage charts
 * [x] Cost charts
-* [ ] Failure analytics
-* [ ] Retry analytics
+* [x] Failure analytics
+* [x] Retry analytics
 * [x] Queue monitoring
 * [x] Runtime metrics
+* [x] Template execution replay — TraceStep persistence + replay endpoint reshaped to Observe event schema (2026-05-16)
 
 ## Logging
 
@@ -361,7 +362,7 @@
 * [x] Token counting
 * [x] Provider cost tracking
 * [x] Per-agent costs
-* [ ] Per-workflow costs
+* [x] Per-workflow costs
 * [x] Per-workspace costs
 
 ## Limits
@@ -369,7 +370,7 @@
 * [x] Hard token limits
 * [x] Soft token warnings
 * [x] Budget ceilings
-* [ ] Usage alerts
+* [x] Usage alerts
 * [x] Beta tester quotas
 * [x] Abuse prevention
 
@@ -490,8 +491,8 @@
 * [x] Workflow progress tracking
 * [x] Workflow logs
 * [x] Workflow cancellation
-* [x] Workflow replay
-* [x] Workflow templates
+* [x] Workflow replay — `SwarmExecutionContext.status` added + lifecycle wired through launch/cancel/SSE/replay paths (2026-05-16)
+* [x] Workflow templates — saas-mvp-72h end-to-end fixed: status column, anchor agent resolution, trace persistence (2026-05-16)
 
 ---
 
@@ -679,6 +680,42 @@ V1 is NOT about perfection.
 V1 is about proving:
 
 > AOS Swarm creates undeniable operational leverage for founders.
+
+---
+
+# Session Log
+
+## 2026-05-18 — Full codebase audit + checklist accuracy pass
+
+Audited every backend app, all frontend pages, agent-swarm runtime, and infra config. Reconciled 12 checklist items that were incorrectly unchecked:
+
+- **Background worker monitoring** — Flower monitoring confirmed in `agent-swarm/docker-compose.runtime.yml` (monitoring profile, port 5555)
+- **Escalation handling** — `EscalationView` in agent_intelligence + PendingAction creation on ESCALATE effect in swarm_bridge
+- **Tool analytics** — `ToolAnalyticsView` confirmed at `agent_intelligence/views.py:674`
+- **Embedding generation** — Google Generative AI `text-embedding-004` wired into ChromaDB `PersistentClient`
+- **Memory tagging** — `MemoryTagViewSet` confirmed in knowledge_base
+- **Retrieval logs** — `QueryLogViewSet` confirmed in knowledge_base
+- **Workflow visualisation** — `WorkflowGraphView` confirmed at `agent_intelligence/views.py:847`
+- **Failure analytics** — `FailureAnalyticsView` + `TaskFailureAnalyticsView` confirmed
+- **Retry analytics** — `RetryAnalyticsView` confirmed
+- **Per-workflow costs** — `WorkflowCostSummaryView` confirmed in billing
+- **Usage alerts** — `UsageAlertsView` confirmed in billing
+
+**Bug fixed:** `ExecutionEventStreamView._stream_from_db` was filtering TraceSteps via `conversation__swarm_executions__id` — an invalid reverse relation (swarm_executions hangs off Agent, not Conversation). Fixed to `conversation__session_id=execution_id` to match how `SwarmTraceEventView` creates the Conversation anchor and how `ExecutionReplayView` queries correctly.
+
+File: `backend/apps/swarm_bridge/views.py:1127`
+
+## 2026-05-16 — Template launch + Observe trace pipeline
+
+Symptom: `Failed: SwarmExecutionContext() got unexpected keyword arguments: 'status'` on template launch, then Observe replay returning 155 bytes (empty) even after status fix.
+
+Root causes + fixes:
+
+1. **Missing `status` column** — `SwarmExecutionContext` was being written to with `.status = "..."` in four places (create, cancel, complete, SSE-done check) but the model had no such field. Added `SwarmExecutionStatus` TextChoices (`pending`/`running`/`completed`/`failed`/`cancelled`/`denied`) + a `status` CharField with `(status, created_at)` index. Migration `0002_swarmexecutioncontext_status_and_more` applied. Normalized all writes to lowercase to match the SSE consumer that was already reading lowercase.
+2. **Trace persistence failing on NOT NULL `conversation.agent_id`** — template runs have no `aos_agent`, so `Conversation.objects.get_or_create(defaults={"agent": None})` violated the FK constraint and zero TraceSteps were written. Added a 3-tier anchor-agent resolver in `WorkflowTemplateLaunchView`: SwarmAgentManifest lookup → user's first agent → get-or-create per-user "swarm-orchestrator" agent. Backfills `ctx.aos_agent` so Observe replay can resolve policy logs too.
+3. **Replay event shape didn't match Observe's renderer** — replay was emitting `{node, input, output}` flat but Observe.jsx renders `EVENT_LABEL[ev.event_type]` with `ev.payload.{node, tokens_in, tokens_out, error}`. Reshaped replay to emit `{event_type: "agent.completed" | "agent.failed" | "trace.step" | "policy.checked" | "policy.denied", payload: {...}}` so labels and metadata render correctly.
+
+Files: `backend/apps/swarm_bridge/models.py`, `backend/apps/swarm_bridge/migrations/0002_*.py`, `backend/apps/swarm_bridge/views.py`.
 
 The beta should answer:
 

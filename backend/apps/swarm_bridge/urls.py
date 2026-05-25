@@ -6,6 +6,7 @@ from .views import (
     SwarmTraceEventView,
     SwarmKBQueryView,
     SwarmExecutionContextDetailView,
+    ExecutionListView,
     SwarmRunView,
     SwarmRunStreamView,
     SwarmRunPollView,
@@ -36,6 +37,9 @@ urlpatterns = [
 
     # 5. Knowledge base enrichment
     path("kb/query/", SwarmKBQueryView.as_view(), name="swarm-kb-query"),
+
+    # Execution list (recent runs)
+    path("executions/", ExecutionListView.as_view(), name="swarm-execution-list"),
 
     # Execution context read-back / escalation polling
     path(

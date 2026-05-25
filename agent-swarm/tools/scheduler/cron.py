@@ -30,7 +30,7 @@ import os
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Callable
 
@@ -131,7 +131,8 @@ def _next_run_after(expr: str, after: datetime) -> Optional[datetime]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def create_job(name: str, schedule: str, agent: str, task: str,
-               engine: str = "claude", enabled: bool = True) -> ToolResult:
+               engine: str = "claude", enabled: bool = True,
+               max_retries: int = 3, retry_delay_minutes: int = 5) -> ToolResult:
     """
     Create a new scheduled job.
 
@@ -155,6 +156,11 @@ def create_job(name: str, schedule: str, agent: str, task: str,
         "last_run": None,
         "next_run": next_run.isoformat(),
         "run_count": 0,
+        "retry_count": 0,
+        "max_retries": int(max_retries),
+        "retry_delay_minutes": int(retry_delay_minutes),
+        "last_status": "scheduled",
+        "last_error": "",
         "created_at": now.isoformat(),
     }
 
@@ -183,7 +189,7 @@ def get_job(job_id: str) -> ToolResult:
 
 def update_job(job_id: str, **updates) -> ToolResult:
     """Update a job's fields (name, schedule, task, enabled, agent, engine)."""
-    allowed = {"name", "schedule", "task", "enabled", "agent", "engine"}
+    allowed = {"name", "schedule", "task", "enabled", "agent", "engine", "max_retries", "retry_delay_minutes"}
     bad = set(updates) - allowed
     if bad:
         return ToolResult(ok=False, error=f"Cannot update fields: {bad}")
@@ -273,12 +279,32 @@ def start_scheduler(trigger_fn: Callable[[dict], None],
                         # Fire the job
                         try:
                             trigger_fn(job)
+                            job["last_status"] = "success"
+                            job["last_error"] = ""
+                            job["retry_count"] = 0
+                            job["run_count"] = job.get("run_count", 0) + 1
+                            job["last_run"] = now.isoformat()
+                            next_nxt = _next_run_after(job["schedule"], now)
+                            job["next_run"] = next_nxt.isoformat() if next_nxt else None
                         except Exception as exc:
-                            print(f"[scheduler] Job '{job['name']}' failed: {exc}")
-                        job["last_run"] = now.isoformat()
-                        job["run_count"] = job.get("run_count", 0) + 1
-                        next_nxt = _next_run_after(job["schedule"], now)
-                        job["next_run"] = next_nxt.isoformat() if next_nxt else None
+                            job["last_error"] = str(exc)
+                            job["run_count"] = job.get("run_count", 0) + 1
+                            retry_count = int(job.get("retry_count", 0))
+                            max_retries = int(job.get("max_retries", 3))
+                            retry_delay_minutes = int(job.get("retry_delay_minutes", 5))
+                            if retry_count < max_retries:
+                                retry_count += 1
+                                job["retry_count"] = retry_count
+                                job["last_status"] = "retrying"
+                                job["next_run"] = (now + timedelta(minutes=retry_delay_minutes * retry_count)).isoformat()
+                            else:
+                                print(f"[scheduler] Job '{job['name']}' failed: {exc}")
+                                job["last_status"] = "failed"
+                                job["retry_count"] = 0
+                                next_nxt = _next_run_after(job["schedule"], now)
+                                job["next_run"] = next_nxt.isoformat() if next_nxt else None
+                        else:
+                            job["run_count"] = job.get("run_count", 0) + 1
                         changed = True
                 if changed:
                     _save_jobs(jobs)
