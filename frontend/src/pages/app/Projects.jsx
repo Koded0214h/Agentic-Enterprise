@@ -25,6 +25,14 @@ const EMPTY_PROJECT = {
   currency: 'USD',
 }
 
+function slugify(value) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
 export default function Projects() {
   const [items, setItems] = useState([])
   const [selectedId, setSelectedId] = useState('')
@@ -35,6 +43,9 @@ export default function Projects() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState(EMPTY_PROJECT)
+  const [slugEdited, setSlugEdited] = useState(false)
+  const [showCreate, setShowCreate] = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')
   const [activityBody, setActivityBody] = useState('')
   const [goalForm, setGoalForm] = useState({
     title: '',
@@ -99,12 +110,29 @@ export default function Projects() {
 
   async function createProject(e) {
     e.preventDefault()
+    const name = form.name.trim()
+    const slug = slugify(form.slug || name)
+    if (!name) {
+      setError('Project name is required')
+      return
+    }
+    if (!slug) {
+      setError('Project slug is required')
+      return
+    }
     setSaving(true)
     setError('')
     try {
-      const created = await projectsAPI.create(form)
+      const created = await projectsAPI.create({
+        ...form,
+        name,
+        slug,
+      })
       const item = created?.id ? created : created?.project || created
       setForm(EMPTY_PROJECT)
+      setSlugEdited(false)
+      setShowCreate(false)
+      setActiveTab('overview')
       await loadProjects()
       if (item?.id) {
         setSelectedId(item.id)
@@ -197,6 +225,10 @@ export default function Projects() {
           <p>Each project is a startup boundary with its own goals, ops, finance, and execution state.</p>
         </div>
         <div className="projects-header-actions">
+          <button className="btn btn-primary" onClick={() => setShowCreate((v) => !v)} disabled={saving}>
+            <RiAddLine size={15} />
+            {showCreate ? 'Close form' : 'New project'}
+          </button>
           <button className="btn btn-ghost" onClick={loadProjects} disabled={loading || detailLoading || saving}>
             <RiRefreshLine size={15} />
             Refresh
@@ -213,15 +245,32 @@ export default function Projects() {
         <Kpi icon={<RiCheckboxCircleLine size={18} />} label="Queue" value={opsCounts.queue_pending ?? 0} sub={`${opsCounts.queue_due_now ?? 0} due now`} />
       </div>
 
-      <div className="projects-grid">
+      {showCreate && (
         <form className="card projects-panel projects-form" onSubmit={createProject}>
           <div className="projects-panel-head">
             <span>Create project</span>
             <span className="badge badge-green">Startup boundary</span>
           </div>
           <div className="projects-fields">
-            <Field label="Name" value={form.name} onChange={(v) => setForm((p) => ({ ...p, name: v }))} />
-            <Field label="Slug" value={form.slug} onChange={(v) => setForm((p) => ({ ...p, slug: v }))} />
+            <Field
+              label="Name"
+              value={form.name}
+              required
+              onChange={(v) => setForm((p) => ({
+                ...p,
+                name: v,
+                slug: slugEdited ? p.slug : slugify(v),
+              }))}
+            />
+            <Field
+              label="Slug"
+              value={form.slug}
+              required
+              onChange={(v) => {
+                setSlugEdited(true)
+                setForm((p) => ({ ...p, slug: slugify(v) }))
+              }}
+            />
             <Field label="Target market" value={form.target_market} onChange={(v) => setForm((p) => ({ ...p, target_market: v }))} />
             <Field label="Stage" value={form.stage} onChange={(v) => setForm((p) => ({ ...p, stage: v }))} />
             <Field label="Budget" value={form.monthly_budget} onChange={(v) => setForm((p) => ({ ...p, monthly_budget: v }))} />
@@ -234,7 +283,9 @@ export default function Projects() {
             Create project
           </button>
         </form>
+      )}
 
+      <div className="projects-workspace">
         <div className="card projects-panel projects-list-panel">
           <div className="projects-panel-head">
             <span>Project list</span>
@@ -249,7 +300,10 @@ export default function Projects() {
                   key={project.id}
                   type="button"
                   className={`projects-list-item ${selectedId === project.id ? 'active' : ''}`}
-                  onClick={() => setSelectedId(project.id)}
+                  onClick={() => {
+                    setSelectedId(project.id)
+                    setActiveTab('overview')
+                  }}
                 >
                   <div className="projects-list-main">
                     <div className="projects-list-title">{project.name}</div>
@@ -268,11 +322,11 @@ export default function Projects() {
             )}
           </div>
         </div>
-      </div>
 
-      {overview && (
-        <>
-          <div className="projects-hero card">
+        <div className="projects-detail-shell">
+          {overview ? (
+            <>
+              <div className="projects-hero card">
             <div className="projects-hero-main">
               <div className="projects-badge-row">
                 <span className="badge badge-green">{overview.status}</span>
@@ -293,16 +347,25 @@ export default function Projects() {
             </div>
           </div>
 
-          <div className="projects-metrics">
-            <Metric label="Members" value={members.length} />
-            <Metric label="Activities" value={activities.length} />
-            <Metric label="Goals" value={goals.length} />
-            <Metric label="Artifacts" value={artifacts.length} />
-            <Metric label="Ops leads" value={opsCounts.leads ?? 0} />
-            <Metric label="Open tickets" value={opsCounts.open_tickets ?? 0} />
-          </div>
+              <div className="projects-tabs" role="tablist" aria-label="Project sections">
+                <Tab id="overview" label="Overview" active={activeTab} onClick={setActiveTab} />
+                <Tab id="goals" label={`Goals ${goals.length}`} active={activeTab} onClick={setActiveTab} />
+                <Tab id="activity" label={`Activity ${activities.length}`} active={activeTab} onClick={setActiveTab} />
+                <Tab id="people" label="People & artifacts" active={activeTab} onClick={setActiveTab} />
+              </div>
 
-          <div className="projects-loop card">
+              {activeTab === 'overview' && (
+                <>
+                  <div className="projects-metrics">
+                    <Metric label="Members" value={members.length} />
+                    <Metric label="Activities" value={activities.length} />
+                    <Metric label="Goals" value={goals.length} />
+                    <Metric label="Artifacts" value={artifacts.length} />
+                    <Metric label="Ops leads" value={opsCounts.leads ?? 0} />
+                    <Metric label="Open tickets" value={opsCounts.open_tickets ?? 0} />
+                  </div>
+
+                  <div className="projects-loop card">
             <div className="projects-panel-head">
               <span>Project loop health</span>
               <span className={`badge badge-${(financeBudget.over_limit || 0) ? 'red' : (financeBudget.over_alert ? 'amber' : 'green')}`}>
@@ -332,9 +395,11 @@ export default function Projects() {
               </div>
             </div>
           </div>
+                </>
+              )}
 
-          <div className="projects-content-grid">
-            <div className="card projects-panel">
+              {activeTab === 'goals' && (
+                <div className="card projects-panel">
               <div className="projects-panel-head">
                 <span>Goals</span>
                 <span className="badge badge-amber">{goals.length}</span>
@@ -362,8 +427,10 @@ export default function Projects() {
                 )) : <div className="projects-empty">No goals yet.</div>}
               </div>
             </div>
+              )}
 
-            <div className="card projects-panel">
+              {activeTab === 'activity' && (
+                <div className="card projects-panel">
               <div className="projects-panel-head">
                 <span>Activities</span>
                 <span className="badge badge-green">{activities.length}</span>
@@ -387,10 +454,11 @@ export default function Projects() {
                 )) : <div className="projects-empty">No activity yet.</div>}
               </div>
             </div>
-          </div>
+              )}
 
-          <div className="projects-content-grid">
-            <div className="card projects-panel">
+              {activeTab === 'people' && (
+                <div className="projects-content-grid">
+                  <div className="card projects-panel">
               <div className="projects-panel-head">
                 <span>Members</span>
                 <span className="badge badge-green">{members.length}</span>
@@ -408,7 +476,7 @@ export default function Projects() {
               </div>
             </div>
 
-            <div className="card projects-panel">
+                  <div className="card projects-panel">
               <div className="projects-panel-head">
                 <span>Artifacts</span>
                 <span className="badge badge-amber">{artifacts.length}</span>
@@ -425,10 +493,32 @@ export default function Projects() {
                 )) : <div className="projects-empty">Artifacts will land here as the startup ships.</div>}
               </div>
             </div>
-          </div>
-        </>
-      )}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="card projects-empty-state">
+              <h2>No project selected</h2>
+              <p>Create or select a project to see its goals, activity, operations, and artifacts.</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
+  )
+}
+
+function Tab({ id, label, active, onClick }) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active === id}
+      className={`projects-tab ${active === id ? 'active' : ''}`}
+      onClick={() => onClick(id)}
+    >
+      {label}
+    </button>
   )
 }
 
@@ -452,14 +542,14 @@ function Metric({ label, value }) {
   )
 }
 
-function Field({ label, value, onChange, multiline = false }) {
+function Field({ label, value, onChange, multiline = false, required = false }) {
   return (
     <label className="projects-field">
       <span>{label}</span>
       {multiline ? (
-        <textarea className="projects-input" value={value} onChange={(e) => onChange(e.target.value)} rows={4} />
+        <textarea className="projects-input" value={value} onChange={(e) => onChange(e.target.value)} rows={4} required={required} />
       ) : (
-        <input className="projects-input" value={value} onChange={(e) => onChange(e.target.value)} />
+        <input className="projects-input" value={value} onChange={(e) => onChange(e.target.value)} required={required} />
       )}
     </label>
   )

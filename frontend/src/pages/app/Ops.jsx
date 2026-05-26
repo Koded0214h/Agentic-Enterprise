@@ -3,12 +3,12 @@ import {
   RiBriefcaseLine,
   RiCustomerService2Line,
   RiRefreshLine,
-  RiArrowRightLine,
   RiAddLine,
   RiCheckboxCircleLine,
   RiTimerLine,
 } from 'react-icons/ri'
 import { ops } from '../../api/ops'
+import { projects as projectsAPI } from '../../api/projects'
 import './Ops.css'
 
 const INITIAL_LEAD = {
@@ -27,6 +27,8 @@ const INITIAL_TICKET = {
 }
 
 export default function Ops() {
+  const [projects, setProjects] = useState([])
+  const [selectedProjectId, setSelectedProjectId] = useState('')
   const [data, setData] = useState(null)
   const [connectors, setConnectors] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -36,15 +38,45 @@ export default function Ops() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    reload()
+    loadProjects()
   }, [])
 
-  async function reload() {
+  useEffect(() => {
+    if (selectedProjectId) {
+      reload(selectedProjectId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProjectId])
+
+  async function loadProjects() {
+    setLoading(true)
+    setError('')
+    try {
+      const [projectData, connectorInfo] = await Promise.all([
+        projectsAPI.list(),
+        ops.connectors(),
+      ])
+      const rows = Array.isArray(projectData) ? projectData : (projectData.results || [])
+      setProjects(rows)
+      setConnectors(connectorInfo)
+      setSelectedProjectId((current) => current || rows[0]?.id || '')
+      if (!rows.length) {
+        setData(null)
+      }
+    } catch (err) {
+      setError(err?.data?.detail || err.message || 'Failed to load ops data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function reload(projectId = selectedProjectId) {
+    if (!projectId) return
     setLoading(true)
     setError('')
     try {
       const [overview, connectorInfo] = await Promise.all([
-        ops.overview(),
+        ops.overview({ project_id: projectId }),
         ops.connectors(),
       ])
       setData(overview)
@@ -56,6 +88,7 @@ export default function Ops() {
     }
   }
 
+  const selectedProject = projects.find((project) => project.id === selectedProjectId) || null
   const counts = data?.counts || {}
   const providers = data?.providers || {}
   const recentLeads = data?.recent?.leads || []
@@ -71,10 +104,14 @@ export default function Ops() {
 
   async function submitLead(e) {
     e.preventDefault()
+    if (!selectedProjectId) {
+      setError('Select a project before creating a lead')
+      return
+    }
     setBusy(true)
     setError('')
     try {
-      await ops.leads.create(leadForm)
+      await ops.leads.create({ ...leadForm, project_id: selectedProjectId })
       setLeadForm(INITIAL_LEAD)
       await reload()
     } catch (err) {
@@ -86,10 +123,14 @@ export default function Ops() {
 
   async function submitTicket(e) {
     e.preventDefault()
+    if (!selectedProjectId) {
+      setError('Select a project before creating a ticket')
+      return
+    }
     setBusy(true)
     setError('')
     try {
-      await ops.tickets.create(ticketForm)
+      await ops.tickets.create({ ...ticketForm, project_id: selectedProjectId })
       setTicketForm(INITIAL_TICKET)
       await reload()
     } catch (err) {
@@ -100,10 +141,14 @@ export default function Ops() {
   }
 
   async function processQueue() {
+    if (!selectedProjectId) {
+      setError('Select a project before processing queue work')
+      return
+    }
     setBusy(true)
     setError('')
     try {
-      await ops.queue.process(25)
+      await ops.queue.process(25, { project_id: selectedProjectId })
       await reload()
     } catch (err) {
       setError(err?.data?.detail || err.message || 'Unable to process queue')
@@ -117,14 +162,30 @@ export default function Ops() {
       <div className="page-header">
         <div className="page-header-left">
           <h1>Ops</h1>
-          <p>Sales, support, queueing, and vendor fallback in one operating layer</p>
+          <p>Sales, support, queueing, and vendor fallback for the selected project</p>
         </div>
         <div className="ops-header-actions">
-          <button className="btn btn-ghost" onClick={reload} disabled={loading || busy}>
+          <label className="ops-project-select">
+            <span>Project</span>
+            <select
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              disabled={loading || busy || !projects.length}
+            >
+              {projects.length ? projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              )) : (
+                <option value="">No projects</option>
+              )}
+            </select>
+          </label>
+          <button className="btn btn-ghost" onClick={() => reload()} disabled={loading || busy || !selectedProjectId}>
             <RiRefreshLine size={15} />
             Refresh
           </button>
-          <button className="btn btn-primary" onClick={processQueue} disabled={loading || busy}>
+          <button className="btn btn-primary" onClick={processQueue} disabled={loading || busy || !selectedProjectId}>
             <RiAddLine size={15} />
             Process queue
           </button>
@@ -132,6 +193,25 @@ export default function Ops() {
       </div>
 
       {error && <div className="ops-error">{error}</div>}
+
+      {selectedProject ? (
+        <div className="card ops-project-context">
+          <div>
+            <span className="ops-context-label">Selected project</span>
+            <strong>{selectedProject.name}</strong>
+            <p>{selectedProject.description || selectedProject.vision || 'No project description yet.'}</p>
+          </div>
+          <div className="ops-context-meta">
+            <span className="badge badge-green">{selectedProject.status}</span>
+            <span className="badge badge-amber">{selectedProject.stage}</span>
+            <span className="badge badge-green">{selectedProject.slug}</span>
+          </div>
+        </div>
+      ) : (
+        <div className="card ops-project-context ops-project-empty">
+          Create a project first, then return here to run sales, support, and queue operations inside that boundary.
+        </div>
+      )}
 
       <div className="ops-kpis">
         <Kpi icon={<RiBriefcaseLine size={18} />} label="Leads" value={counts.leads ?? '—'} sub={`${counts.open_opportunities ?? 0} open opportunities`} />
@@ -193,7 +273,7 @@ export default function Ops() {
             <Field label="Company" value={leadForm.company} onChange={(v) => setLeadForm((p) => ({ ...p, company: v }))} />
             <Field label="Source" value={leadForm.source} onChange={(v) => setLeadForm((p) => ({ ...p, source: v }))} />
           </div>
-          <button className="btn btn-primary" disabled={busy || loading}>
+          <button className="btn btn-primary" disabled={busy || loading || !selectedProjectId}>
             <RiAddLine size={15} />
             Create lead
           </button>
@@ -211,7 +291,7 @@ export default function Ops() {
             <Field label="Priority" value={ticketForm.priority} onChange={(v) => setTicketForm((p) => ({ ...p, priority: v }))} />
             <Field label="Body" value={ticketForm.body} onChange={(v) => setTicketForm((p) => ({ ...p, body: v }))} multiline />
           </div>
-          <button className="btn btn-primary" disabled={busy || loading}>
+          <button className="btn btn-primary" disabled={busy || loading || !selectedProjectId}>
             <RiAddLine size={15} />
             Create ticket
           </button>
