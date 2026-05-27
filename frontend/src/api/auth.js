@@ -2,17 +2,7 @@ import { api } from './client'
 
 export const auth = {
   login: (email, password) =>
-    fetch('/api/token/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: email, password }),
-    }).then(async (res) => {
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw Object.assign(new Error(err.detail || 'Login failed'), { data: err })
-      }
-      return res.json()
-    }),
+    api.post('/token/', { username: email, password }),
 
   signup: (data) => api.post('/gateway/auth/register/', data),
 
