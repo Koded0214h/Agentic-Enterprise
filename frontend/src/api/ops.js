@@ -33,7 +33,7 @@ export const ops = {
   },
   queue: {
     list: () => api.get('/ops/queue/'),
-    process: (limit = 25) => api.post('/ops/queue/process/', { limit }),
+    process: (limit = 25, params = {}) => api.post('/ops/queue/process/', { limit, ...params }),
     retry: (id) => api.post(`/ops/queue/${id}/retry/`),
   },
 }
