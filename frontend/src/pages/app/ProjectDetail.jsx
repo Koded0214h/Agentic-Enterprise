@@ -100,7 +100,7 @@ export default function ProjectDetail() {
       </div>
 
       <div className="projects-kpis">
-        <Kpi icon={<RiMoneyDollarCircleLine size={18} />} label="Usage cost" value={Number(financeUsage.total_cost || 0).toFixed(4)} sub={`${financeUsage.record_count || 0} usage records`} />
+        <Kpi icon={<RiMoneyDollarCircleLine size={18} />} label="Usage cost" value={Number(financeUsage.total_cost || 0).toFixed(2)} sub={`${financeUsage.record_count || 0} usage records`} />
         <Kpi icon={<RiCpuLine size={18} />} label="Budget spend" value={Number(financeBudget.current_spend || 0).toFixed(2)} sub={`${financeBudget.percent_used ?? 0}% used`} />
         <Kpi icon={<RiRobot2Line size={18} />} label="Agents" value={agentsSummary.total} sub={`${agentsSummary.running} running`} />
         <Kpi icon={<RiShieldCheckLine size={18} />} label="Queue" value={opsCounts.queue_pending ?? 0} sub={`${opsCounts.queue_due_now ?? 0} due now`} />

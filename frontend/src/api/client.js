@@ -1,4 +1,5 @@
-const BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '')
+const DEFAULT_API_URL = 'https://agentic-enterprise.onrender.com/api'
+const BASE = (import.meta.env.VITE_API_URL || DEFAULT_API_URL).replace(/\/+$/, '')
 
 function getAccess() {
   return localStorage.getItem('aos_access')

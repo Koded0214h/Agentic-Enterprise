@@ -29,6 +29,7 @@ const INITIAL_TICKET = {
 export default function Ops() {
   const [projects, setProjects] = useState([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
+  const [activeTab, setActiveTab] = useState('queue')
   const [data, setData] = useState(null)
   const [connectors, setConnectors] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -113,6 +114,7 @@ export default function Ops() {
     try {
       await ops.leads.create({ ...leadForm, project_id: selectedProjectId })
       setLeadForm(INITIAL_LEAD)
+      setActiveTab('recent')
       await reload()
     } catch (err) {
       setError(err?.data?.detail || err.message || 'Unable to create lead')
@@ -132,6 +134,7 @@ export default function Ops() {
     try {
       await ops.tickets.create({ ...ticketForm, project_id: selectedProjectId })
       setTicketForm(INITIAL_TICKET)
+      setActiveTab('recent')
       await reload()
     } catch (err) {
       setError(err?.data?.detail || err.message || 'Unable to create ticket')
@@ -220,139 +223,167 @@ export default function Ops() {
         <Kpi icon={<RiCheckboxCircleLine size={18} />} label="Bridge" value={providers.bridge?.available ? 'Ready' : 'Idle'} sub={`${providers.crm?.provider || 'crm'} / ${providers.support?.provider || 'support'}`} />
       </div>
 
-      <div className="ops-provider-grid">
-        <div className="card ops-panel">
-          <div className="ops-panel-head">
-            <span>Connector status</span>
-            <span className={`badge badge-${connectors?.bridge?.available ? 'green' : 'amber'}`}>
-              {connectors?.bridge?.available ? 'Fallback ready' : 'No fallback bridge'}
-            </span>
-          </div>
-          <div className="ops-status-list">
-            <StatusRow name="CRM" value={connectors?.crm?.provider || 'hubspot'} ok={connectors?.crm?.available} />
-            <StatusRow name="Support" value={connectors?.support?.provider || 'zendesk'} ok={connectors?.support?.available} />
-            <StatusRow name="Fallback webhook" value={connectors?.bridge?.webhook_configured ? 'configured' : 'missing'} ok={connectors?.bridge?.webhook_configured} />
-            <StatusRow name="Fallback email" value={connectors?.bridge?.email_configured ? 'configured' : 'missing'} ok={connectors?.bridge?.email_configured} />
-          </div>
-        </div>
-
-        <div className="card ops-panel">
-          <div className="ops-panel-head">
-            <span>Queue health</span>
-            <span className={`badge badge-${queueBadge}`}>{counts.queue_pending || 0} pending</span>
-          </div>
-          <div className="ops-metric-stack">
-            <div className="ops-metric">
-              <span>Failed</span>
-              <strong>{counts.queue_failed ?? 0}</strong>
-            </div>
-            <div className="ops-metric">
-              <span>Due now</span>
-              <strong>{counts.queue_due_now ?? 0}</strong>
-            </div>
-            <div className="ops-metric">
-              <span>Touchpoints</span>
-              <strong>{counts.touchpoints ?? 0}</strong>
-            </div>
-          </div>
-          <p className="ops-muted">
-            The queue is the fallback control plane when no vendor creds are present.
-          </p>
-        </div>
+      <div className="ops-tabs" role="tablist" aria-label="Ops sections">
+        <Tab id="queue" label="Queue & health" active={activeTab} onClick={setActiveTab} />
+        <Tab id="create" label="Create" active={activeTab} onClick={setActiveTab} />
+        <Tab id="recent" label="Recent activity" active={activeTab} onClick={setActiveTab} />
       </div>
 
-      <div className="ops-form-grid">
-        <form className="card ops-form" onSubmit={submitLead}>
-          <div className="ops-panel-head">
-            <span>Create lead</span>
-            <span className="badge badge-green">Sales intake</span>
-          </div>
-          <div className="ops-fields">
-            <Field label="Name" value={leadForm.name} onChange={(v) => setLeadForm((p) => ({ ...p, name: v }))} />
-            <Field label="Email" value={leadForm.email} onChange={(v) => setLeadForm((p) => ({ ...p, email: v }))} />
-            <Field label="Company" value={leadForm.company} onChange={(v) => setLeadForm((p) => ({ ...p, company: v }))} />
-            <Field label="Source" value={leadForm.source} onChange={(v) => setLeadForm((p) => ({ ...p, source: v }))} />
-          </div>
-          <button className="btn btn-primary" disabled={busy || loading || !selectedProjectId}>
-            <RiAddLine size={15} />
-            Create lead
-          </button>
-        </form>
-
-        <form className="card ops-form" onSubmit={submitTicket}>
-          <div className="ops-panel-head">
-            <span>Create ticket</span>
-            <span className="badge badge-amber">Support intake</span>
-          </div>
-          <div className="ops-fields">
-            <Field label="Requester" value={ticketForm.requester_name} onChange={(v) => setTicketForm((p) => ({ ...p, requester_name: v }))} />
-            <Field label="Email" value={ticketForm.requester_email} onChange={(v) => setTicketForm((p) => ({ ...p, requester_email: v }))} />
-            <Field label="Subject" value={ticketForm.subject} onChange={(v) => setTicketForm((p) => ({ ...p, subject: v }))} />
-            <Field label="Priority" value={ticketForm.priority} onChange={(v) => setTicketForm((p) => ({ ...p, priority: v }))} />
-            <Field label="Body" value={ticketForm.body} onChange={(v) => setTicketForm((p) => ({ ...p, body: v }))} multiline />
-          </div>
-          <button className="btn btn-primary" disabled={busy || loading || !selectedProjectId}>
-            <RiAddLine size={15} />
-            Create ticket
-          </button>
-        </form>
-      </div>
-
-      <div className="ops-lower-grid">
-        <div className="card ops-panel">
-          <div className="ops-panel-head">
-            <span>Recent leads</span>
-            <span className="badge badge-green">{recentLeads.length}</span>
-          </div>
-          <OpsList items={recentLeads} empty="No leads yet. Create one to start the sales loop." renderItem={(item) => (
-            <div className="ops-row">
-              <div>
-                <div className="ops-row-title">{item.name}</div>
-                <div className="ops-row-sub">{item.company || item.email || 'No company'} · {item.source}</div>
+      {activeTab === 'queue' && (
+        <>
+          <div className="ops-provider-grid">
+            <div className="card ops-panel">
+              <div className="ops-panel-head">
+                <span>Connector status</span>
+                <span className={`badge badge-${connectors?.bridge?.available ? 'green' : 'amber'}`}>
+                  {connectors?.bridge?.available ? 'Fallback ready' : 'No fallback bridge'}
+                </span>
               </div>
-              <span className="badge badge-amber">{item.status}</span>
-            </div>
-          )} />
-        </div>
-
-        <div className="card ops-panel">
-          <div className="ops-panel-head">
-            <span>Recent tickets</span>
-            <span className="badge badge-amber">{recentTickets.length}</span>
-          </div>
-          <OpsList items={recentTickets} empty="No tickets yet. Create one to start the support loop." renderItem={(item) => (
-            <div className="ops-row">
-              <div>
-                <div className="ops-row-title">{item.subject}</div>
-                <div className="ops-row-sub">{item.requester_name} · {item.priority} · {item.channel}</div>
-              </div>
-              <span className="badge badge-green">{item.status}</span>
-            </div>
-          )} />
-        </div>
-      </div>
-
-      <div className="card ops-panel">
-        <div className="ops-panel-head">
-          <span>Queue</span>
-          <span className="badge badge-amber">{recentQueue.length} recent</span>
-        </div>
-        <OpsList items={recentQueue} empty="Queue is empty. New creates and syncs will show up here." renderItem={(item) => (
-          <div className="ops-row">
-            <div>
-              <div className="ops-row-title">{item.kind}</div>
-              <div className="ops-row-sub">
-                {item.lead_name || item.ticket_subject || item.opportunity_title || item.touchpoint_summary || 'No linked object'}
+              <div className="ops-status-list">
+                <StatusRow name="CRM" value={connectors?.crm?.provider || 'hubspot'} ok={connectors?.crm?.available} />
+                <StatusRow name="Support" value={connectors?.support?.provider || 'zendesk'} ok={connectors?.support?.available} />
+                <StatusRow name="Fallback webhook" value={connectors?.bridge?.webhook_configured ? 'configured' : 'missing'} ok={connectors?.bridge?.webhook_configured} />
+                <StatusRow name="Fallback email" value={connectors?.bridge?.email_configured ? 'configured' : 'missing'} ok={connectors?.bridge?.email_configured} />
               </div>
             </div>
-            <div className="ops-row-meta">
-              <span className={`badge badge-${item.status === 'FAILED' ? 'red' : item.status === 'COMPLETED' ? 'green' : 'amber'}`}>{item.status}</span>
-              <span className="ops-row-time">{item.age_minutes}m</span>
+
+            <div className="card ops-panel">
+              <div className="ops-panel-head">
+                <span>Queue health</span>
+                <span className={`badge badge-${queueBadge}`}>{counts.queue_pending || 0} pending</span>
+              </div>
+              <div className="ops-metric-stack">
+                <div className="ops-metric">
+                  <span>Failed</span>
+                  <strong>{counts.queue_failed ?? 0}</strong>
+                </div>
+                <div className="ops-metric">
+                  <span>Due now</span>
+                  <strong>{counts.queue_due_now ?? 0}</strong>
+                </div>
+                <div className="ops-metric">
+                  <span>Touchpoints</span>
+                  <strong>{counts.touchpoints ?? 0}</strong>
+                </div>
+              </div>
+              <p className="ops-muted">
+                The queue is the fallback control plane when no vendor creds are present.
+              </p>
             </div>
           </div>
-        )} />
-      </div>
+
+          <div className="card ops-panel">
+            <div className="ops-panel-head">
+              <span>Queue</span>
+              <span className="badge badge-amber">{recentQueue.length} recent</span>
+            </div>
+            <OpsList items={recentQueue} empty="Queue is empty. New creates and syncs will show up here." renderItem={(item) => (
+              <div className="ops-row">
+                <div>
+                  <div className="ops-row-title">{item.kind}</div>
+                  <div className="ops-row-sub">
+                    {item.lead_name || item.ticket_subject || item.opportunity_title || item.touchpoint_summary || 'No linked object'}
+                  </div>
+                </div>
+                <div className="ops-row-meta">
+                  <span className={`badge badge-${item.status === 'FAILED' ? 'red' : item.status === 'COMPLETED' ? 'green' : 'amber'}`}>{item.status}</span>
+                  <span className="ops-row-time">{item.age_minutes}m</span>
+                </div>
+              </div>
+            )} />
+          </div>
+        </>
+      )}
+
+      {activeTab === 'create' && (
+        <div className="ops-form-grid">
+          <form className="card ops-form" onSubmit={submitLead}>
+            <div className="ops-panel-head">
+              <span>Create lead</span>
+              <span className="badge badge-green">Sales intake</span>
+            </div>
+            <div className="ops-fields">
+              <Field label="Name" value={leadForm.name} onChange={(v) => setLeadForm((p) => ({ ...p, name: v }))} />
+              <Field label="Email" value={leadForm.email} onChange={(v) => setLeadForm((p) => ({ ...p, email: v }))} />
+              <Field label="Company" value={leadForm.company} onChange={(v) => setLeadForm((p) => ({ ...p, company: v }))} />
+              <Field label="Source" value={leadForm.source} onChange={(v) => setLeadForm((p) => ({ ...p, source: v }))} />
+            </div>
+            <button className="btn btn-primary" disabled={busy || loading || !selectedProjectId}>
+              <RiAddLine size={15} />
+              Create lead
+            </button>
+          </form>
+
+          <form className="card ops-form" onSubmit={submitTicket}>
+            <div className="ops-panel-head">
+              <span>Create ticket</span>
+              <span className="badge badge-amber">Support intake</span>
+            </div>
+            <div className="ops-fields">
+              <Field label="Requester" value={ticketForm.requester_name} onChange={(v) => setTicketForm((p) => ({ ...p, requester_name: v }))} />
+              <Field label="Email" value={ticketForm.requester_email} onChange={(v) => setTicketForm((p) => ({ ...p, requester_email: v }))} />
+              <Field label="Subject" value={ticketForm.subject} onChange={(v) => setTicketForm((p) => ({ ...p, subject: v }))} />
+              <Field label="Priority" value={ticketForm.priority} onChange={(v) => setTicketForm((p) => ({ ...p, priority: v }))} />
+              <Field label="Body" value={ticketForm.body} onChange={(v) => setTicketForm((p) => ({ ...p, body: v }))} multiline />
+            </div>
+            <button className="btn btn-primary" disabled={busy || loading || !selectedProjectId}>
+              <RiAddLine size={15} />
+              Create ticket
+            </button>
+          </form>
+        </div>
+      )}
+
+      {activeTab === 'recent' && (
+        <div className="ops-lower-grid">
+          <div className="card ops-panel">
+            <div className="ops-panel-head">
+              <span>Recent leads</span>
+              <span className="badge badge-green">{recentLeads.length}</span>
+            </div>
+            <OpsList items={recentLeads} empty="No leads yet. Create one to start the sales loop." renderItem={(item) => (
+              <div className="ops-row">
+                <div>
+                  <div className="ops-row-title">{item.name}</div>
+                  <div className="ops-row-sub">{item.company || item.email || 'No company'} · {item.source}</div>
+                </div>
+                <span className="badge badge-amber">{item.status}</span>
+              </div>
+            )} />
+          </div>
+
+          <div className="card ops-panel">
+            <div className="ops-panel-head">
+              <span>Recent tickets</span>
+              <span className="badge badge-amber">{recentTickets.length}</span>
+            </div>
+            <OpsList items={recentTickets} empty="No tickets yet. Create one to start the support loop." renderItem={(item) => (
+              <div className="ops-row">
+                <div>
+                  <div className="ops-row-title">{item.subject}</div>
+                  <div className="ops-row-sub">{item.requester_name} · {item.priority} · {item.channel}</div>
+                </div>
+                <span className="badge badge-green">{item.status}</span>
+              </div>
+            )} />
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+function Tab({ id, label, active, onClick }) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active === id}
+      className={`ops-tab ${active === id ? 'active' : ''}`}
+      onClick={() => onClick(id)}
+    >
+      {label}
+    </button>
   )
 }
 
