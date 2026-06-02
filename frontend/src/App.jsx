@@ -25,6 +25,7 @@ import AgentDetail from './pages/app/AgentDetail'
 import Projects from './pages/app/Projects'
 import ProjectDetail from './pages/app/ProjectDetail'
 import Ops from './pages/app/Ops'
+import Marketing from './pages/app/Marketing'
 import TermsOfService from './pages/TermsOfService'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 
@@ -61,6 +62,7 @@ export default function App() {
             <Route path="observe" element={<Observe />} />
             <Route path="finance" element={<Finance />} />
             <Route path="ops" element={<Ops />} />
+            <Route path="marketing" element={<Marketing />} />
             <Route path="iam" element={<IAMPage />} />
             <Route path="iam/*" element={<IAMPage />} />
             <Route path="settings" element={<Settings />} />

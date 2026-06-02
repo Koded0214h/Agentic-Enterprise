@@ -4,7 +4,7 @@ import {
   RiDashboardLine, RiRobot2Line, RiFlowChart, RiShieldCheckLine,
   RiWalletLine, RiShutDownLine, RiBellLine, RiRocketLine,
   RiLayoutGridLine, RiEyeLine, RiSettings3Line, RiShieldLine, RiBriefcaseLine,
-  RiTeamLine, RiBrainLine, RiArrowRightLine,
+  RiTeamLine, RiBrainLine, RiArrowRightLine, RiMegaphoneLine,
 } from 'react-icons/ri'
 import { useAuth } from '../../context/AuthContext'
 import { agents as agentsAPI } from '../../api/agents'
@@ -35,6 +35,7 @@ function buildNav(pendingCount) {
         { to: '/app/approvals', label: 'Approvals', Icon: RiShieldCheckLine, badge: pendingCount },
         { to: '/app/observe',   label: 'Observe',   Icon: RiEyeLine },
         { to: '/app/ops',       label: 'Ops',       Icon: RiBriefcaseLine },
+        { to: '/app/marketing', label: 'Marketing', Icon: RiMegaphoneLine },
         { to: '/app/finance',   label: 'Finance',   Icon: RiWalletLine },
       ],
     },

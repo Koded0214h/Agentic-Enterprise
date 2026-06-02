@@ -71,6 +71,7 @@ class QueueProcessor:
             QueueItemType.ACCOUNT_SYNC: cls._sync_account,
             QueueItemType.WEBHOOK_DISPATCH: cls._dispatch_webhook,
             QueueItemType.EMAIL_DISPATCH: cls._dispatch_email,
+            QueueItemType.CAMPAIGN: cls._process_campaign,
         }
         handler = dispatch_map.get(item.item_type)
         if handler is None:
@@ -161,3 +162,10 @@ class QueueProcessor:
     @staticmethod
     def _dispatch_email(item) -> dict:
         return {"sent_to": item.payload.get("to")}
+
+    
+    @staticmethod
+    def _process_campaign(item) -> dict:
+        from apps.marketing.services import MarketingService
+
+        return MarketingService.process_queue_item(item)
