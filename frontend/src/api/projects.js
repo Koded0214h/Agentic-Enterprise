@@ -25,4 +25,7 @@ export const projects = {
   },
   members: (params = {}) => api.get(`/projects/members/${qs(params)}`),
   activities: (params = {}) => api.get(`/projects/activities/${qs(params)}`),
+  timeline: (id) => api.get(`/projects/projects/${id}/timeline/`),
+  readiness: (id) => api.get(`/projects/projects/${id}/readiness/`),
+  runs: (id) => api.get(`/projects/projects/${id}/runs/`),
 }

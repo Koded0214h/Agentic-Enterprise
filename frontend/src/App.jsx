@@ -24,6 +24,8 @@ import WorkflowTemplates from './pages/app/WorkflowTemplates'
 import AgentDetail from './pages/app/AgentDetail'
 import Projects from './pages/app/Projects'
 import ProjectDetail from './pages/app/ProjectDetail'
+import ProjectTimeline from './pages/app/ProjectTimeline'
+import ProjectReadiness from './pages/app/ProjectReadiness'
 import Ops from './pages/app/Ops'
 import Marketing from './pages/app/Marketing'
 import TermsOfService from './pages/TermsOfService'
@@ -50,6 +52,8 @@ export default function App() {
             <Route index element={<Overview />} />
             <Route path="projects" element={<Projects />} />
             <Route path="projects/:id" element={<ProjectDetail />} />
+            <Route path="projects/:id/timeline" element={<ProjectTimeline />} />
+            <Route path="projects/:id/readiness" element={<ProjectReadiness />} />
             <Route path="blueprints" element={<BlueprintGallery />} />
             <Route path="blueprints/:id" element={<BlueprintDetail />} />
             <Route path="blueprints/:id/deploy" element={<DeployWizard />} />

@@ -387,6 +387,233 @@ class ProjectViewSet(OwnerQuerysetMixin, viewsets.ModelViewSet):
         )
 
 
+    @action(detail=True, methods=["get"])
+    def timeline(self, request, pk=None):
+        """
+        Chronological event feed for a project: activity, queue events,
+        touchpoints, pending approvals, and workflow/swarm runs merged and
+        sorted by time. Provides the operator view of "what the system did."
+        """
+        project = self.get_object()
+        from apps.ops.models import Touchpoint, QueueItem as OpsQueueItem
+        from apps.ops_core.models import QueueItem as CoreQueueItem
+        from apps.agent_intelligence.models import WorkflowTask, PendingAction
+        from apps.swarm_bridge.models import SwarmExecutionContext
+
+        events = []
+
+        # Project activities
+        for a in project.activities.select_related("actor").order_by("-created_at")[:100]:
+            events.append({
+                "kind": "activity",
+                "subkind": a.kind,
+                "id": str(a.id),
+                "summary": a.summary,
+                "actor": a.actor.email if a.actor else "system",
+                "meta": a.metadata,
+                "ts": a.created_at.isoformat(),
+            })
+
+        # Ops queue items
+        for q in OpsQueueItem.objects.filter(project=project).order_by("-created_at")[:60]:
+            events.append({
+                "kind": "queue",
+                "subkind": q.kind,
+                "id": str(q.id),
+                "summary": f"{q.kind} → {q.status}",
+                "actor": "queue",
+                "meta": {"status": q.status, "attempts": q.attempts, "error": q.last_error[:120] if q.last_error else ""},
+                "ts": q.updated_at.isoformat(),
+            })
+
+        # Ops-core queue items
+        for q in CoreQueueItem.objects.filter(project=project).order_by("-created_at")[:40]:
+            events.append({
+                "kind": "queue",
+                "subkind": q.item_type,
+                "id": str(q.id),
+                "summary": f"{q.item_type} → {q.status}",
+                "actor": "queue",
+                "meta": {"status": q.status, "retries": q.retry_count, "error": q.error_message[:120] if q.error_message else ""},
+                "ts": q.updated_at.isoformat(),
+            })
+
+        # Touchpoints (sales/support interactions)
+        for t in Touchpoint.objects.filter(project=project).select_related("account", "lead").order_by("-created_at")[:60]:
+            events.append({
+                "kind": "touchpoint",
+                "subkind": t.kind.lower(),
+                "id": str(t.id),
+                "summary": t.summary,
+                "actor": t.direction.lower(),
+                "meta": {
+                    "account": t.account.name if t.account else None,
+                    "lead": t.lead.name if t.lead else None,
+                },
+                "ts": t.created_at.isoformat(),
+            })
+
+        # Pending actions / approvals
+        for p in PendingAction.objects.filter(project=project).select_related("agent").order_by("-created_at")[:40]:
+            events.append({
+                "kind": "approval",
+                "subkind": p.status.lower(),
+                "id": str(p.id),
+                "summary": f"{p.action_type} on {p.resource} — {p.status}",
+                "actor": p.agent.name if p.agent else "agent",
+                "meta": {
+                    "status": p.status,
+                    "decided_by": p.decided_by.email if p.decided_by else None,
+                },
+                "ts": p.created_at.isoformat(),
+            })
+
+        # Workflow tasks (runs)
+        for w in WorkflowTask.objects.filter(project=project).select_related("agent").order_by("-created_at")[:50]:
+            events.append({
+                "kind": "run",
+                "subkind": "workflow_task",
+                "id": str(w.id),
+                "summary": w.description[:120],
+                "actor": w.agent.name if w.agent else "agent",
+                "meta": {"status": w.status},
+                "ts": w.updated_at.isoformat(),
+            })
+
+        # Swarm executions
+        for s in SwarmExecutionContext.objects.filter(project=project).order_by("-created_at")[:50]:
+            events.append({
+                "kind": "run",
+                "subkind": "swarm",
+                "id": str(s.id),
+                "summary": s.task_summary[:120],
+                "actor": s.swarm_agent_name or "swarm",
+                "meta": {"status": s.status},
+                "ts": s.created_at.isoformat(),
+            })
+
+        events.sort(key=lambda e: e["ts"], reverse=True)
+
+        return Response({
+            "project_id": str(project.id),
+            "events": events[:200],
+            "total": len(events),
+        })
+
+    @action(detail=True, methods=["get"])
+    def readiness(self, request, pk=None):
+        """
+        Autonomy readiness score for a project. Returns a 0-100 score,
+        per-capability flags, risky-action warnings, and a health summary.
+        """
+        project = self.get_object()
+        from apps.ops.models import Lead, Ticket, QueueItem as OpsQueueItem
+        from apps.ops_core.models import Lead as CoreLead, Ticket as CoreTicket
+        from apps.agent_intelligence.models import WorkflowTask, PendingAction
+        from apps.swarm_bridge.models import SwarmExecutionContext
+        from apps.policy_engine.models import Policy
+        from apps.billing.models import AgentBudget
+        from apps.marketing.models import Campaign
+        from apps.agent_registry.models import Agent
+
+        # ── gather raw counts ──────────────────────────────────────────────
+        goals = project.goals.all()
+        goals_count = goals.count()
+        goals_active = goals.filter(status__in=["PLANNED", "IN_PROGRESS"]).count()
+
+        agents = Agent.objects.filter(owner=project.owner)
+        agent_count = agents.count()
+
+        has_budget = bool(project.monthly_budget and project.monthly_budget > 0)
+        budget_obj = AgentBudget.objects.filter(project=project, is_active=True).first()
+
+        crm_connected = (
+            CoreLead.objects.filter(project=project).exclude(hubspot_id="").exists()
+            or CoreLead.objects.filter(project=project).exclude(salesforce_id="").exists()
+            or Lead.objects.filter(project=project).exclude(external_id="").filter(external_provider__in=["hubspot", "salesforce"]).exists()
+        )
+        support_connected = (
+            CoreTicket.objects.filter(project=project).exclude(zendesk_id="").exists()
+            or CoreTicket.objects.filter(project=project).exclude(intercom_id="").exists()
+            or Ticket.objects.filter(project=project).exclude(external_id="").filter(external_provider__in=["zendesk", "intercom"]).exists()
+        )
+
+        policies_count = Policy.objects.filter(project=project, is_active=True).count()
+
+        queue_total = OpsQueueItem.objects.filter(project=project).count()
+        queue_failed = OpsQueueItem.objects.filter(project=project, status__in=["FAILED", "failed"]).count()
+        queue_health_ok = queue_total == 0 or (queue_failed / queue_total) < 0.2
+
+        workflows_run = WorkflowTask.objects.filter(project=project).exists() or SwarmExecutionContext.objects.filter(project=project).exists()
+
+        pending_approvals = PendingAction.objects.filter(project=project, status="PENDING").count()
+
+        campaigns_count = Campaign.objects.filter(project=project).count()
+
+        # ── score components (weights sum to 100) ─────────────────────────
+        components = [
+            {"key": "goals",      "label": "Goals defined",          "weight": 15, "ok": goals_count > 0},
+            {"key": "budget",     "label": "Budget configured",       "weight": 10, "ok": has_budget},
+            {"key": "agents",     "label": "Agents available",        "weight": 15, "ok": agent_count > 0},
+            {"key": "crm",        "label": "CRM connector active",    "weight": 10, "ok": crm_connected},
+            {"key": "support",    "label": "Support connector active","weight": 10, "ok": support_connected},
+            {"key": "policies",   "label": "Policies configured",     "weight": 10, "ok": policies_count > 0},
+            {"key": "queue",      "label": "Queue health OK",         "weight": 10, "ok": queue_health_ok},
+            {"key": "workflows",  "label": "Workflows launched",      "weight": 10, "ok": workflows_run},
+            {"key": "marketing",  "label": "Marketing campaigns",     "weight": 10, "ok": campaigns_count > 0},
+        ]
+
+        score = sum(c["weight"] for c in components if c["ok"])
+
+        # ── capability flags ───────────────────────────────────────────────
+        flags = []
+        for c in components:
+            flags.append({
+                "key": c["key"],
+                "label": c["label"],
+                "ok": c["ok"],
+                "weight": c["weight"],
+            })
+
+        # ── risky-action warnings ──────────────────────────────────────────
+        warnings = []
+        if pending_approvals > 0:
+            warnings.append({"level": "high", "message": f"{pending_approvals} action(s) paused, waiting for approval"})
+        if queue_total > 0 and not queue_health_ok:
+            pct = round(queue_failed / queue_total * 100)
+            warnings.append({"level": "high", "message": f"Queue failure rate is {pct}% — check sync health"})
+        if not has_budget:
+            warnings.append({"level": "medium", "message": "No monthly budget set — spend is uncapped"})
+        if policies_count == 0:
+            warnings.append({"level": "medium", "message": "No policies configured — all agent actions are ungated"})
+        if not crm_connected:
+            warnings.append({"level": "low", "message": "CRM not connected — lead sync is manual"})
+        if not support_connected:
+            warnings.append({"level": "low", "message": "Support platform not connected — ticket sync is manual"})
+
+        return Response({
+            "project_id": str(project.id),
+            "score": score,
+            "score_label": "High" if score >= 70 else "Medium" if score >= 40 else "Low",
+            "flags": flags,
+            "warnings": warnings,
+            "summary": {
+                "goals": goals_count,
+                "goals_active": goals_active,
+                "agents": agent_count,
+                "policies": policies_count,
+                "campaigns": campaigns_count,
+                "queue_total": queue_total,
+                "queue_failed": queue_failed,
+                "pending_approvals": pending_approvals,
+                "crm_connected": crm_connected,
+                "support_connected": support_connected,
+                "has_budget": has_budget,
+                "workflows_run": workflows_run,
+            },
+        })
+
+
 class ProjectMemberViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ProjectMember.objects.select_related("project", "user")
     serializer_class = ProjectMemberSerializer

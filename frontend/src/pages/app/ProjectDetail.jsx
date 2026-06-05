@@ -6,6 +6,7 @@ import {
   RiMoneyDollarCircleLine,
   RiRobot2Line,
   RiShieldCheckLine,
+  RiTimeLine,
 } from 'react-icons/ri'
 import { projects as projectsAPI } from '../../api/projects'
 import { ops } from '../../api/ops'
@@ -78,7 +79,15 @@ export default function ProjectDetail() {
     <div className="projects-page">
       <div className="projects-detail-top">
         <Link className="projects-back-link" to="/app/projects"><RiArrowLeftLine size={15} /> Projects</Link>
-        <button className="btn btn-ghost" onClick={loadProject}>Refresh</button>
+        <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+          <Link className="btn btn-ghost" to={`/app/projects/${id}/timeline`}>
+            <RiTimeLine size={14} /> Timeline
+          </Link>
+          <Link className="btn btn-ghost" to={`/app/projects/${id}/readiness`}>
+            <RiShieldCheckLine size={14} /> Readiness
+          </Link>
+          <button className="btn btn-ghost" onClick={loadProject}>Refresh</button>
+        </div>
       </div>
 
       <div className="projects-hero card">
