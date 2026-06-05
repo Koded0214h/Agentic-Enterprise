@@ -39,6 +39,21 @@ function looksLikePrompt(line) {
   return PROMPT_PATTERNS.some(p => p.test(line))
 }
 
+// ─── Terminal line classifier ─────────────────────────────────────────────────
+function lineClass(content = '') {
+  if (/^\[sys\]/.test(content))          return 'tl-sys'
+  if (/^PHASE\s+\d/i.test(content))      return 'tl-phase'
+  if (/^\s+SUCCESS\b/i.test(content))    return 'tl-success'
+  if (/^\s+FAILED\b/i.test(content))     return 'tl-fail'
+  if (/^\[error\]/i.test(content))       return 'tl-error'
+  if (/^\[wrote\]/i.test(content))       return 'tl-wrote'
+  if (/^#{1,3} /.test(content))          return 'tl-heading'
+  if (/^\s*[*•-] /.test(content))        return 'tl-bullet'
+  if (/^\s*`{3}/.test(content))          return 'tl-fence'
+  if (/^\s{4,}/.test(content))           return 'tl-indent'
+  return ''
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function SwarmRun() {
   const { runId } = useParams()
@@ -52,7 +67,7 @@ export default function SwarmRun() {
   const [elapsed, setElapsed] = useState(0)
   const [inputVal, setInputVal] = useState('')
   const [awaitingInput, setAwaitingInput] = useState(false)
-  const [view, setView] = useState('split')
+  const [view, setView] = useState('terminal')
   const [streamStatus, setStreamStatus] = useState('connecting') // connecting | live | error
 
   const termRef = useRef(null)
@@ -200,130 +215,120 @@ export default function SwarmRun() {
 
   return (
     <div className="sr-page">
-      {/* Top bar */}
-      <div className="sr-topbar">
-        <div className="sr-topbar-left">
+
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <div className="sr-header">
+        <div className="sr-header-left">
           <Link to="/app" className="sr-back"><RiArrowLeftLine size={14} /> Back</Link>
-          <RiRocketLine size={14} className="sr-topbar-icon" />
-          <span className="sr-topbar-goal">{goal || 'Swarm run'}</span>
-        </div>
-        <div className="sr-topbar-center">
-          <div className="sr-progress-bar">
-            <div className="sr-progress-fill" style={{ width: `${progress}%` }} />
+          <div className="sr-header-meta">
+            <div className="sr-header-goal">
+              <RiRocketLine size={13} className="sr-header-icon" />
+              <span>{goal || 'Swarm run'}</span>
+            </div>
+            {model && <span className="sr-model-tag">{model}</span>}
           </div>
-          <span className="sr-progress-label">
-            {done ? 'Complete' : (currentPhase?.label || 'Starting…')}
-          </span>
         </div>
-        <div className="sr-topbar-right">
-          {model && <span className="sr-model-tag">{model}</span>}
+        <div className="sr-header-right">
+          {done ? (
+            <span className={`sr-status-badge ${exitCode === 0 ? 'ok' : 'fail'}`}>
+              {exitCode === 0 ? <><RiCheckLine size={12} /> Complete</> : <><RiErrorWarningLine size={12} /> Failed</>}
+            </span>
+          ) : (
+            <span className="sr-status-badge running">
+              <RiLoader4Line size={12} className="spin" />
+              {currentPhase?.label || 'Starting…'}
+            </span>
+          )}
           <div className="sr-timer"><RiTimeLine size={12} />{fmt(elapsed)}</div>
           <div className="sr-view-toggle">
-            <button className={view === 'nodes' ? 'active' : ''} onClick={() => setView('nodes')} title="Nodes view"><RiNodeTree size={14} /></button>
-            <button className={view === 'split' ? 'active' : ''} onClick={() => setView('split')} title="Split view">⊞</button>
-            <button className={view === 'terminal' ? 'active' : ''} onClick={() => setView('terminal')} title="Terminal only"><RiTerminalLine size={14} /></button>
+            <button className={view === 'split'    ? 'active' : ''} onClick={() => setView('split')}    title="Split view">⊞</button>
+            <button className={view === 'terminal' ? 'active' : ''} onClick={() => setView('terminal')} title="Terminal only"><RiTerminalLine size={13} /></button>
+            <button className={view === 'nodes'    ? 'active' : ''} onClick={() => setView('nodes')}    title="Phases only"><RiNodeTree size={13} /></button>
           </div>
         </div>
       </div>
 
-      <div className={`sr-body sr-body-${view}`}>
-        {/* ─── Phase / Node panel ─── */}
-        {view !== 'terminal' && (
-          <div className="sr-nodes-panel">
-            <div className="sr-phases-flow">
-              {phases.map((phase, i) => (
-                <div key={phase.id} className="sr-phase-col">
-                  {/* Connector arrow */}
-                  {i > 0 && (
-                    <div className={`sr-phase-arrow ${phases[i - 1].state === 'done' ? 'active' : ''}`}>
-                      →
-                    </div>
-                  )}
-
-                  <div className={`sr-phase-node sr-phase-${phase.state}`}>
-                    <div className="sr-phase-node-head">
-                      <PhaseIcon state={phase.state} />
-                      <span className="sr-phase-num">{i + 1}</span>
-                    </div>
-                    <span className="sr-phase-label">{phase.label}</span>
-                    <span className="sr-phase-desc">{phase.desc}</span>
-                  </div>
-
-                  {/* Sub-agents under Execute */}
-                  {phase.id === 'execute' && phase.agents.length > 0 && (
-                    <div className="sr-agents-col">
-                      {phase.agents.map(agent => (
-                        <div key={agent.name} className={`sr-agent-node sr-agent-${agent.state}`}>
-                          <RiRobot2Line size={11} />
-                          <span>{agent.name}</span>
-                          <AgentDot state={agent.state} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
+      {/* ── Phase strip (always visible in split/nodes) ─────────────────── */}
+      {view !== 'terminal' && (
+        <div className="sr-phase-strip">
+          {phases.map((phase, i) => (
+            <div key={phase.id} className="sr-ps-item">
+              {i > 0 && <div className={`sr-ps-connector ${phases[i-1].state === 'done' ? 'lit' : ''}`} />}
+              <div className={`sr-ps-step sr-ps-${phase.state}`}>
+                <div className="sr-ps-circle">
+                  <PhaseIcon state={phase.state} num={i + 1} />
                 </div>
-              ))}
-            </div>
-
-            {done && (
-              <div className={`sr-done-banner ${exitCode === 0 ? 'ok' : 'fail'}`}>
-                {exitCode === 0
-                  ? <><RiCheckLine size={14} /> Swarm completed — {allAgents.length} agent{allAgents.length !== 1 ? 's' : ''} dispatched</>
-                  : <><RiErrorWarningLine size={14} /> Run exited with code {exitCode}</>
-                }
+                <div className="sr-ps-text">
+                  <span className="sr-ps-label">{phase.label}</span>
+                  <span className="sr-ps-desc">{phase.desc}</span>
+                  {phase.id === 'execute' && phase.agents.map(a => (
+                    <span key={a.name} className={`sr-ps-agent sr-ps-agent-${a.state}`}>
+                      <RiRobot2Line size={9} />{a.name}
+                    </span>
+                  ))}
+                </div>
               </div>
-            )}
-          </div>
-        )}
-
-        {/* ─── Terminal panel ─── */}
-        {view !== 'nodes' && (
-          <div className="sr-terminal-panel">
-            <div className="sr-term-bar">
-              <span className="sr-term-dot red" /><span className="sr-term-dot amber" /><span className="sr-term-dot green" />
-              <span className="sr-term-title">orchestrator · {goal}</span>
-              {!done && streamStatus === 'connecting' && <span className="sr-term-live" style={{ opacity: 0.5 }}>connecting…</span>}
-              {!done && streamStatus === 'live'       && <span className="sr-term-live"><span className="dot dot-green dot-pulse" style={{ width: 6, height: 6 }} /> live</span>}
-              {!done && streamStatus === 'error'      && <span className="sr-term-exit fail">stream error</span>}
-              {done  && <span className={`sr-term-exit ${exitCode === 0 ? 'ok' : 'fail'}`}>exit {exitCode}</span>}
             </div>
+          ))}
 
-            <div className="sr-terminal" ref={termRef}>
-              {lines.map((l, i) => (
-                <div key={i} className={`sr-tline ${l.isInput ? 'sr-tline-input' : ''}`}>
-                  {l.content}
-                </div>
-              ))}
-              {!done && <div className="sr-tline sr-tline-cursor"><span className="sr-blink">▊</span></div>}
+          {done && (
+            <div className={`sr-ps-result ${exitCode === 0 ? 'ok' : 'fail'}`}>
+              {exitCode === 0
+                ? <><RiCheckLine size={13} /> {allAgents.length} agent{allAgents.length !== 1 ? 's' : ''} · {fmt(elapsed)}</>
+                : <><RiErrorWarningLine size={13} /> exit {exitCode}</>}
             </div>
+          )}
+        </div>
+      )}
 
-            {/* Interactive input */}
-            <form className={`sr-input-bar ${awaitingInput ? 'active' : ''}`} onSubmit={sendInput}>
-              <span className="sr-input-prompt">›</span>
-              <input
-                ref={inputRef}
-                className="sr-input"
-                value={inputVal}
-                onChange={e => setInputVal(e.target.value)}
-                placeholder={awaitingInput ? 'Orchestrator is waiting for your response…' : 'Type to send input to the swarm…'}
-                disabled={done}
-                onKeyDown={e => { if (e.key === 'Enter') sendInput(e) }}
-              />
-              <button type="submit" className="sr-input-send" disabled={done || !inputVal.trim()}>
-                <RiSendPlaneLine size={14} />
-              </button>
-            </form>
+      {/* ── Terminal ────────────────────────────────────────────────────── */}
+      {view !== 'nodes' && (
+        <div className="sr-terminal-panel">
+          <div className="sr-term-bar">
+            <span className="sr-term-dot red" />
+            <span className="sr-term-dot amber" />
+            <span className="sr-term-dot green" />
+            <span className="sr-term-title">orchestrator · {goal}</span>
+            {!done && streamStatus === 'connecting' && <span className="sr-term-status dim">connecting…</span>}
+            {!done && streamStatus === 'live'       && <span className="sr-term-status live"><span className="sr-live-dot" /> live</span>}
+            {!done && streamStatus === 'error'      && <span className="sr-term-status err">stream error</span>}
+            {done  && <span className={`sr-term-exit ${exitCode === 0 ? 'ok' : 'fail'}`}>exit {exitCode}</span>}
           </div>
-        )}
-      </div>
+
+          <div className="sr-terminal" ref={termRef}>
+            {lines.map((l, i) => (
+              <div key={i} className={`sr-tline ${l.isInput ? 'tl-input' : lineClass(l.content)}`}>
+                {l.content}
+              </div>
+            ))}
+            {!done && <div className="sr-tline"><span className="sr-blink">▊</span></div>}
+          </div>
+
+          <form className={`sr-input-bar ${awaitingInput ? 'active' : ''}`} onSubmit={sendInput}>
+            <span className="sr-input-prompt">›</span>
+            <input
+              ref={inputRef}
+              className="sr-input"
+              value={inputVal}
+              onChange={e => setInputVal(e.target.value)}
+              placeholder={awaitingInput ? 'Orchestrator is waiting…' : 'Send input to swarm…'}
+              disabled={done}
+              onKeyDown={e => { if (e.key === 'Enter') sendInput(e) }}
+            />
+            <button type="submit" className="sr-input-send" disabled={done || !inputVal.trim()}>
+              <RiSendPlaneLine size={14} />
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   )
 }
 
-function PhaseIcon({ state }) {
-  if (state === 'done')    return <RiCheckLine size={13} className="sr-phase-icon done" />
-  if (state === 'running') return <RiLoader4Line size={13} className="sr-phase-icon running spin" />
-  return <span className="sr-phase-icon pending" />
+function PhaseIcon({ state, num }) {
+  if (state === 'done')    return <RiCheckLine size={12} />
+  if (state === 'running') return <RiLoader4Line size={12} className="spin" />
+  return <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--mono)' }}>{num}</span>
 }
 
 function AgentDot({ state }) {

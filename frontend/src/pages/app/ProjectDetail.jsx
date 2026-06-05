@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   RiArrowLeftLine,
+  RiBriefcaseLine,
+  RiCheckLine,
+  RiCloseLine,
   RiCpuLine,
+  RiFlagLine,
   RiMoneyDollarCircleLine,
+  RiRocketLine,
   RiRobot2Line,
+  RiSettings3Line,
   RiShieldCheckLine,
   RiTimeLine,
 } from 'react-icons/ri'
@@ -29,7 +35,7 @@ export default function ProjectDetail() {
   }, [id])
 
   async function loadProject() {
-    setLoading(true)
+    if (!detail) setLoading(true)
     setError('')
     try {
       const [projectData, opsData, financeData, agentData] = await Promise.all([
@@ -86,7 +92,9 @@ export default function ProjectDetail() {
           <Link className="btn btn-ghost" to={`/app/projects/${id}/readiness`}>
             <RiShieldCheckLine size={14} /> Readiness
           </Link>
-          <button className="btn btn-ghost" onClick={loadProject}>Refresh</button>
+          <Link className="btn btn-ghost" to={`/app/projects/${id}/settings`}>
+            <RiSettings3Line size={14} /> Settings
+          </Link>
         </div>
       </div>
 
@@ -107,6 +115,13 @@ export default function ProjectDetail() {
           </div>
         </div>
       </div>
+
+      <GettingStarted
+        id={id}
+        goals={goals}
+        projectName={project?.name}
+        onGoalAdded={loadProject}
+      />
 
       <div className="projects-kpis">
         <Kpi icon={<RiMoneyDollarCircleLine size={18} />} label="Usage cost" value={Number(financeUsage.total_cost || 0).toFixed(2)} sub={`${financeUsage.record_count || 0} usage records`} />
@@ -165,6 +180,122 @@ export default function ProjectDetail() {
             <Row title={artifact.name} sub={`${artifact.kind} - ${artifact.path || 'inline'}`} badge={artifact.kind} />
           )} />
         </section>
+      </div>
+    </div>
+  )
+}
+
+function GettingStarted({ id, goals, projectName, onGoalAdded }) {
+  const gsKey     = `aos_gs_${id}`
+  const launchKey = `aos_swarm_${id}`
+  const [dismissed,   setDismissed]   = useState(() => localStorage.getItem(gsKey) === '1')
+  const [hasLaunched, setHasLaunched] = useState(() => localStorage.getItem(launchKey) === '1')
+  const [goalInput, setGoalInput] = useState('')
+  const [adding, setAdding] = useState(false)
+  const navigate = useNavigate()
+
+  const hasGoal = goals.length > 0
+
+  if (dismissed || (hasGoal && hasLaunched)) return null
+
+  async function addGoal(e) {
+    e.preventDefault()
+    const title = goalInput.trim()
+    if (!title) return
+    setAdding(true)
+    try {
+      await projectsAPI.goals.create({ project: id, title, status: 'PLANNED', priority: 1 })
+      setGoalInput('')
+      onGoalAdded()
+    } catch {
+      // ignore inline errors silently
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  function launchSwarm() {
+    const prompt = goals[0]?.title || projectName || ''
+    localStorage.setItem(launchKey, '1')
+    setHasLaunched(true)
+    navigate(`/app/swarm?prompt=${encodeURIComponent(prompt)}`)
+  }
+
+  function dismiss() {
+    localStorage.setItem(gsKey, '1')
+    setDismissed(true)
+  }
+
+  const steps = [
+    {
+      done: true,
+      icon: <RiBriefcaseLine size={16} />,
+      title: 'Project created',
+      desc: 'Your operating workspace is live.',
+      action: null,
+    },
+    {
+      done: hasGoal,
+      icon: <RiFlagLine size={16} />,
+      title: 'Add your first goal',
+      desc: 'Define what success looks like for this project.',
+      action: !hasGoal ? (
+        <form className="gs-goal-form" onSubmit={addGoal}>
+          <input
+            className="gs-goal-input"
+            value={goalInput}
+            onChange={e => setGoalInput(e.target.value)}
+            placeholder="e.g. Reach 100 paying customers"
+          />
+          <button type="submit" className="btn btn-primary btn-sm" disabled={adding || !goalInput.trim()}>
+            {adding ? '…' : 'Add'}
+          </button>
+        </form>
+      ) : null,
+    },
+    {
+      done: hasLaunched,
+      icon: <RiRocketLine size={16} />,
+      title: 'Launch your first swarm',
+      desc: 'Tell your agents what to do — they handle the rest.',
+      action: !hasLaunched ? (
+        <button
+          className="btn btn-primary btn-sm"
+          type="button"
+          onClick={launchSwarm}
+          disabled={!hasGoal}
+          title={!hasGoal ? 'Add a goal first' : 'Open swarm runner'}
+        >
+          <RiRocketLine size={13} /> Run Swarm →
+        </button>
+      ) : null,
+    },
+  ]
+
+  return (
+    <div className="card gs-card">
+      <div className="gs-header">
+        <span className="gs-title">Getting started</span>
+        <button className="btn btn-ghost gs-dismiss" onClick={dismiss} type="button" title="Dismiss">
+          <RiCloseLine size={16} />
+        </button>
+      </div>
+      <div className="gs-steps">
+        {steps.map((step, i) => (
+          <div key={i} className={`gs-step${step.done ? ' gs-step-done' : ''}`}>
+            <div className="gs-step-indicator">
+              {step.done ? <RiCheckLine size={13} /> : <span>{i + 1}</span>}
+            </div>
+            <div className="gs-step-body">
+              <div className="gs-step-head">
+                {step.icon}
+                <span className="gs-step-title">{step.title}</span>
+              </div>
+              <p className="gs-step-desc">{step.desc}</p>
+              {step.action && <div className="gs-step-action">{step.action}</div>}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

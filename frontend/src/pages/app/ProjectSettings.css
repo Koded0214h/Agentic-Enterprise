@@ -1,0 +1,236 @@
+.ps-page { max-width: 760px; }
+
+.ps-header {
+  padding: 20px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.ps-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-h);
+  margin: 0 0 4px;
+}
+.ps-sub {
+  font-size: 12px;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.ps-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ps-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ps-row-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ps-select-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ps-select {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-2);
+  color: var(--text-h);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ps-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+}
+
+.ps-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.ps-msg {
+  font-size: 12px;
+  font-weight: 600;
+}
+.ps-msg-ok  { color: var(--green); }
+.ps-msg-err { color: var(--red); }
+
+/* Members */
+.ps-members {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ps-member-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+.ps-member-row:last-child { border-bottom: none; }
+
+.ps-member-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.ps-member-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.ps-member-name  { font-size: 13px; font-weight: 600; color: var(--text-h); }
+.ps-member-email { font-size: 11px; color: var(--text-2); }
+
+.ps-members-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-2);
+}
+.ps-inline-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+.ps-inline-link:hover { text-decoration: underline; }
+
+/* Danger zone */
+.ps-danger-zone {
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.ps-danger-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--red);
+}
+
+.ps-danger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 6px 0;
+}
+
+.ps-danger-row-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  margin: 0 0 3px;
+}
+
+.ps-danger-row-sub {
+  font-size: 12px;
+  color: var(--text-2);
+  margin: 0;
+  max-width: 44ch;
+  line-height: 1.4;
+}
+
+.ps-danger-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 14px 0;
+}
+
+.ps-btn-archive {
+  border: 1px solid var(--amber);
+  color: var(--amber);
+  background: transparent;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ps-btn-archive:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.1);
+}
+.ps-btn-archive:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ps-btn-delete {
+  border: 1px solid var(--red);
+  color: var(--red);
+  background: transparent;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ps-btn-delete:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.1);
+}
+.ps-btn-delete:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ps-delete-confirm {
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 10px;
+  padding: 16px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ps-delete-prompt {
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 0;
+}
+.ps-delete-prompt strong { color: var(--text-h); }
+
+.ps-delete-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ps-delete-input {
+  flex: 1;
+  min-width: 180px;
+}
+
+@media (max-width: 640px) {
+  .ps-fields,
+  .ps-row-2 { grid-template-columns: 1fr; }
+  .ps-danger-row { flex-direction: column; align-items: flex-start; }
+}

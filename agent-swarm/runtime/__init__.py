@@ -60,16 +60,20 @@ async def run_agent(
     department_id: str = "",
     agent_category: str = "",
     timeout_seconds: int = 1800,
+    engine_override: str = "",
 ) -> AgentResult:
     """
     Run an agent natively (async). Suitable for direct calls and tests.
     For production queue-based execution, use enqueue_agent().
+
+    engine_override: if set (e.g. "claude", "gemini"), forces all agents in
+    this call to use that provider regardless of their category routing.
     """
     eid = execution_id or str(uuid.uuid4())
     perms = permissions or ["file.read"]
 
     agent_def = AgentDefinition.load(agent_name)
-    provider = get_provider(agent_def.category or agent_category)
+    provider = get_provider(agent_def.category or agent_category, engine_override=engine_override)
     registry = ToolRegistry.for_agent(perms)
     memory = AgentMemory(agent_name)
     tracer = TraceEmitter(eid, agent_name, department_id)

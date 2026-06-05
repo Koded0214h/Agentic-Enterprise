@@ -558,22 +558,67 @@ def _finish_run(run_id: str, exit_code: int, status: str) -> None:
 def _pick_specialist(goal: str) -> tuple[str, str]:
     """Route a free-form goal to the most appropriate specialist agent."""
     g = goal.lower()
-    if any(k in g for k in ("frontend", " ui ", "react", "component", "css", "design system")):
+
+    # Engineering — frontend / UI work
+    if any(k in g for k in (
+        "landing page", "homepage", "website", "webpage",
+        "frontend", " ui ", "react", "component", "css", "design system",
+        "html", "tailwind", "wireframe", "mockup", "prototype",
+    )):
         return "engineering-frontend-developer", "engineering"
-    if any(k in g for k in ("devops", "deploy", "docker", "kubernetes", "ci/cd", "infrastructure", "pipeline")):
+
+    # Engineering — backend / infra
+    if any(k in g for k in (
+        "api", "backend", "database", "server", "endpoint", "auth",
+        "rest", "graphql", "microservice", "schema", "migration",
+    )):
+        return "engineering-backend-architect", "engineering"
+
+    # DevOps / infrastructure
+    if any(k in g for k in (
+        "devops", "deploy", "docker", "kubernetes", "ci/cd",
+        "infrastructure", "pipeline", "terraform", "cloud", "hosting",
+    )):
         return "devops", "engineering"
-    if any(k in g for k in ("sale", "lead", "outreach", "crm", "prospect", "pitch", "cold email")):
+
+    # Sales / revenue / customer acquisition
+    if any(k in g for k in (
+        "paying customer", "paying user", "revenue", "monetiz",
+        "sale", "lead", "outreach", "crm", "prospect", "pitch",
+        "cold email", "acquire", "acquisition", "churn", "conversion",
+        "100 customer", "100 user", "first customer", "sign up",
+    )):
         return "sales-account-strategist", "sales"
-    if any(k in g for k in ("market", "campaign", "social media", "email marketing", "brand", "launch", "content")):
+
+    # Marketing / growth / content
+    if any(k in g for k in (
+        "market", "campaign", "social media", "email marketing",
+        "brand", "launch", "content", "seo", "ads", "traffic",
+        "funnel", "growth", "viral", "influencer", "newsletter",
+        "blog", "copywriting", "messaging", "positioning",
+    )):
         return "marketing-content-creator", "marketing"
-    if any(k in g for k in ("product", "prd", "roadmap", "user story", "priorit", "feature")):
+
+    # Product
+    if any(k in g for k in (
+        "product", "prd", "roadmap", "user story", "priorit",
+        "feature", "mvp", "onboarding", "ux", "user flow",
+    )):
         return "product-manager", "product"
-    if any(k in g for k in ("research", "competitor", "market size", "tam", "trend", "analysis", "landscape")):
+
+    # Research / strategy
+    if any(k in g for k in (
+        "research", "competitor", "market size", "tam", "trend",
+        "analysis", "landscape", "benchmark", "swot", "strategy",
+        "business plan", "investor", "pitch deck",
+    )):
         return "strategy-competitor-analyst", "strategy"
-    return "engineering-backend-architect", "engineering"
+
+    # Default: marketing is the most useful catch-all for business goals
+    return "marketing-content-creator", "marketing"
 
 
-def _native_graph_runner(run_id: str, run: dict, goal: str) -> None:
+def _native_graph_runner(run_id: str, run: dict, goal: str, engine: str = "") -> None:
     """
     Background thread: runs a 3-agent DAG (plan → execute → ship) using the
     native LLM runtime. Emits terminal lines into run['lines'] so the polling
@@ -723,6 +768,7 @@ def _native_graph_runner(run_id: str, run: dict, goal: str) -> None:
             execution_id=f"{run_id}:{node.id}",
             agent_category=node.agent_category,
             timeout_seconds=node.timeout_seconds,
+            engine_override=engine,
         )
         if not result.success:
             raise RuntimeError(result.error or "Agent execution failed")
@@ -788,7 +834,8 @@ class SwarmRunView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        goal = (request.data.get("goal") or "").strip()
+        goal   = (request.data.get("goal")   or "").strip()
+        engine = (request.data.get("engine") or "").strip()
         if not goal:
             return Response({"error": "goal is required"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -829,7 +876,7 @@ class SwarmRunView(APIView):
 
         t = threading.Thread(
             target=_native_graph_runner,
-            args=(run_id, run, goal),
+            args=(run_id, run, goal, engine),
             daemon=True,
         )
         t.start()

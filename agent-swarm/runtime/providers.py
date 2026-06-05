@@ -827,13 +827,32 @@ def _make_provider(provider_name: str, model: str) -> LLMProvider:
     return AnthropicProvider(model=model)
 
 
-def get_provider(agent_category: str = "") -> LLMProvider:
+def get_provider(agent_category: str = "", engine_override: str = "") -> LLMProvider:
     """
     Return the appropriate LLMProvider for a given agent category, AUTOMATICALLY
     falling back to whatever provider key the operator has configured. So a
     user with only GEMINI_API_KEY can run agents routed to Anthropic — they'll
     transparently use Gemini instead.
+
+    engine_override: if set (e.g. "claude", "gemini", "openai"), forces that
+    provider regardless of the agent category routing table.
     """
+    _ENGINE_ALIAS: dict[str, str] = {
+        "claude": "anthropic",
+        "anthropic": "anthropic",
+        "gemini": "gemini",
+        "openai": "openai",
+        "codex": "openai",
+        "mistral": "mistral",
+        "ollama": "ollama",
+        "local": "ollama",
+    }
+    if engine_override:
+        provider_name = _ENGINE_ALIAS.get(engine_override.lower(), engine_override.lower())
+        model = _PROVIDER_DEFAULT_MODEL.get(provider_name, "")
+        resolved_name, resolved_model = _resolve_provider(provider_name, model)
+        return _make_provider(resolved_name, resolved_model)
+
     primary, model = _PROVIDER_ROUTING.get(agent_category, _DEFAULT_ROUTING)
     resolved_name, resolved_model = _resolve_provider(primary, model)
     return _make_provider(resolved_name, resolved_model)

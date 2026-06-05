@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { RiArrowRightLine, RiRobot2Line } from 'react-icons/ri'
+import { Link, useNavigate } from 'react-router-dom'
+import { RiArrowRightLine, RiRobot2Line, RiBriefcaseLine, RiAddLine, RiFlashlightLine } from 'react-icons/ri'
 import { agents as agentsAPI } from '../../api/agents'
+import { projects as projectsAPI } from '../../api/projects'
 import './Overview.css'
 
 const STATUS_MAP = {
@@ -15,7 +16,10 @@ const STATUS_MAP = {
 export default function Overview() {
   const [agentData, setAgentData] = useState({ count: 0, results: [] })
   const [approvals, setApprovals] = useState([])
+  const [projects, setProjects] = useState([])
+  const [projectsLoading, setProjectsLoading] = useState(true)
   const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
 
   useEffect(() => {
     Promise.all([
@@ -29,6 +33,14 @@ export default function Overview() {
       }
       if (ap?.results) setApprovals(ap.results)
     }).catch(() => {}).finally(() => setLoading(false))
+
+    projectsAPI.list({ status: 'ACTIVE' })
+      .then(data => {
+        const rows = Array.isArray(data) ? data : (data.results || [])
+        setProjects(rows)
+      })
+      .catch(() => {})
+      .finally(() => setProjectsLoading(false))
   }, [])
 
   const { count, results } = agentData
@@ -76,6 +88,55 @@ export default function Overview() {
           </p>
           <span className="ov-kpi-trend">dev · staging · prod</span>
         </div>
+      </div>
+
+      {/* Projects */}
+      <div className="card ov-panel ov-projects-panel">
+        <div className="ov-panel-head">
+          <span>Your projects</span>
+          {projects.length > 0 && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <span className="badge badge-green">{projects.length} active</span>
+              <Link to="/app/projects" className="btn btn-ghost btn-sm">View all →</Link>
+            </div>
+          )}
+        </div>
+
+        {projectsLoading ? (
+          <div className="ov-loading">Loading projects…</div>
+        ) : projects.length === 0 ? (
+          <div className="ov-projects-empty">
+            <div className="ov-projects-empty-icon">
+              <RiFlashlightLine size={28} />
+            </div>
+            <p className="ov-projects-empty-title">No projects yet</p>
+            <p className="ov-projects-empty-sub">A project is your startup's operating boundary — it holds your goals, agents, budget, and workflows.</p>
+            <button className="btn btn-primary" onClick={() => navigate('/app/projects')}>
+              <RiAddLine size={15} /> Create your first project
+            </button>
+          </div>
+        ) : (
+          <div className="ov-projects-grid">
+            {projects.slice(0, 6).map(p => (
+              <Link key={p.id} to={`/app/projects/${p.id}`} className="ov-project-card">
+                <div className="ov-project-card-top">
+                  <div className="ov-project-icon">
+                    <RiBriefcaseLine size={15} />
+                  </div>
+                  <span className={`badge badge-${p.stage === 'GROWTH' || p.stage === 'SCALE' ? 'green' : 'amber'}`}>
+                    {p.stage}
+                  </span>
+                </div>
+                <div className="ov-project-name">{p.name}</div>
+                <div className="ov-project-meta">{p.description || p.target_market || 'No description'}</div>
+                <div className="ov-project-footer">
+                  <span>{p.currency} {Number(p.monthly_budget || 0).toLocaleString()} / mo</span>
+                  <RiArrowRightLine size={13} />
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Two-col */}
