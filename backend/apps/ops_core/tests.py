@@ -441,8 +441,11 @@ class QueueProcessorTests(APITestCase):
         item.refresh_from_db()
         self.assertEqual(item.status, QueueItemStatus.PENDING)
 
-    def test_unknown_item_type_raises(self):
-        item = self._make_item(item_type=QueueItemType.CAMPAIGN, payload={})
+    def test_campaign_item_dispatches_to_marketing_service(self):
+        item = self._make_item(
+            item_type=QueueItemType.CAMPAIGN,
+            payload={"action": "unsupported_test_action"},
+        )
         with self.assertRaises(ValueError):
             QueueProcessor._dispatch(item)
 
