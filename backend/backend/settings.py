@@ -44,6 +44,8 @@ INSTALLED_APPS = [
     "apps.notifications",
     # Anas Sprint 1 — queue processor + project-scoped ops objects
     "apps.ops_core",
+    # Anas Sprint 3 — project-scoped marketing loop
+    "apps.marketing",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -195,6 +197,12 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
+
+# Upload-Post publishing connector. When unset, marketing publishing uses a
+# deterministic dry-run path so local/dev flows remain verifiable.
+UPLOADPOST_API_URL = os.getenv("UPLOADPOST_API_URL", "")
+UPLOADPOST_API_KEY = os.getenv("UPLOADPOST_API_KEY", "")
+UPLOADPOST_USER = os.getenv("UPLOADPOST_USER", "")
 
 # SSO / OAuth2
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
