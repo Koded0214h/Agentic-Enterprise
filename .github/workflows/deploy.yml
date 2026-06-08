@@ -34,6 +34,7 @@ jobs:
       DEBUG: "False"
       GOOGLE_API_KEY: ci-dummy-not-real
       ANTHROPIC_API_KEY: ci-dummy-not-real
+      CHROMA_GOOGLE_PALM_API_KEY: ci-dummy-not-real
       ALLOWED_HOSTS: localhost
     steps:
       - uses: actions/checkout@v4

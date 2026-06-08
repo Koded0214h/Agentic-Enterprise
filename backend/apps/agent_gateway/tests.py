@@ -1,6 +1,7 @@
 import uuid
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -76,6 +77,7 @@ class AgentLoginViewTest(APITestCase):
 
 class AgentLogoutViewTest(APITestCase):
     def setUp(self):
+        cache.clear()
         self.user = User.objects.create_user(username="owner", password="pass")
         self.agent, self.key = make_agent(self.user)
 
@@ -109,6 +111,7 @@ class AgentLogoutViewTest(APITestCase):
 
 class UserRegisterViewTest(APITestCase):
     def setUp(self):
+        cache.clear()
         self.url = reverse("user-register")
 
     def test_successful_registration(self):

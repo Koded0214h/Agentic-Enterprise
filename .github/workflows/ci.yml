@@ -34,6 +34,7 @@ jobs:
       ALLOWED_HOSTS: localhost
       GOOGLE_API_KEY: ci-dummy-not-real
       ANTHROPIC_API_KEY: ci-dummy-not-real
+      CHROMA_GOOGLE_PALM_API_KEY: ci-dummy-not-real
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

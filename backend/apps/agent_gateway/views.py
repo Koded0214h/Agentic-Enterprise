@@ -136,11 +136,15 @@ class AgentLoginView(APIView):
 
 class AgentLogoutView(APIView):
     """Revoke agent session"""
-    authentication_classes = [AgentAuthentication]
+    authentication_classes = []
+    permission_classes = []
 
     def post(self, request):
-        auth_header = request.headers.get('Authorization')
-        token = auth_header.split()[1]
+        auth_header = request.headers.get('Authorization', '')
+        parts = auth_header.split()
+        if len(parts) != 2 or parts[0].lower() != 'bearer':
+            return Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
+        token = parts[1]
 
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
@@ -148,7 +152,7 @@ class AgentLogoutView(APIView):
             session.revoked_at = timezone.now()
             session.save()
             return Response({'message': 'Successfully logged out'})
-        except (jwt.InvalidTokenError, AgentSession.DoesNotExist):
+        except (jwt.InvalidTokenError, KeyError, AgentSession.DoesNotExist):
             return Response(
                 {'error': 'Invalid token'},
                 status=status.HTTP_400_BAD_REQUEST,
