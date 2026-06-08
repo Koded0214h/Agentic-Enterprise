@@ -683,15 +683,19 @@ def _native_graph_runner(run_id: str, run: dict, goal: str, engine: str = "") ->
         agent_name=specialist_name,
         agent_category=specialist_category,
         task=(
-            f"Build this:\n\n  '{goal}'\n\n"
-            "Use the planner's output above as your blueprint.\n\n"
-            "IMPORTANT — you MUST create actual files. Use your file_write tool to write "
-            "every file to disk. Do NOT just describe what to build — BUILD IT.\n\n"
-            "For each file:\n"
-            "  1. Call file_write with the correct path and complete file contents\n"
-            "  2. After writing, confirm: '[wrote] path/to/file'\n\n"
-            "Start with the most critical files first. Write complete, working code — "
-            "no placeholders, no TODOs. A developer should be able to run this immediately."
+            f"Execute this goal by creating real files:\n\n  '{goal}'\n\n"
+            "The planner's output above is your exact blueprint. Follow it file by file.\n\n"
+            "## HOW TO WORK\n"
+            "For EVERY file in the plan:\n"
+            "  1. Call the `file.write` tool — path + complete contents\n"
+            "  2. Wait for the tool result confirming success\n"
+            "  3. Move to the next file\n\n"
+            "## RULES\n"
+            "- NEVER write file contents as text in your message — use the tool\n"
+            "- NEVER say 'I would create...' or 'Here is what the file would contain'\n"
+            "- Write COMPLETE files: no placeholders, no TODOs, no '...rest of code here'\n"
+            "- After ALL files are written, write a one-paragraph summary of what was built\n\n"
+            "Start immediately. Call `file.write` for the first file now."
         ),
         depends_on=["plan"],
         permissions=perms,
@@ -766,6 +770,7 @@ def _native_graph_runner(run_id: str, run: dict, goal: str, engine: str = "") ->
             task=node.task + context_block,
             permissions=node.permissions,
             execution_id=f"{run_id}:{node.id}",
+            workspace_dir=node.workspace_dir,
             agent_category=node.agent_category,
             timeout_seconds=node.timeout_seconds,
             engine_override=engine,
@@ -1567,7 +1572,10 @@ class ExecutionListView(APIView):
         exec_type = request.query_params.get("type", "")
         if exec_type == "template":
             qs = qs.filter(swarm_agent_name__startswith="template:")
-        qs = qs[:30]
+        project_id = request.query_params.get("project_id", "")
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+        qs = qs[:50]
         results = []
         for ctx in qs:
             name = ctx.swarm_agent_name or ""

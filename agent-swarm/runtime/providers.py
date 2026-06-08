@@ -177,24 +177,30 @@ class AnthropicProvider(LLMProvider):
 
     def _format_tools(self, tools: list[ToolSchema] | None) -> list[dict]:
         if not tools:
+            self._tool_name_map: dict[str, str] = {}
             return []
-        return [
-            {
-                "name": t.name,
+        result = []
+        self._tool_name_map = {}
+        for t in tools:
+            safe = t.name.replace(".", "_").replace("-", "_")
+            self._tool_name_map[safe] = t.name
+            result.append({
+                "name": safe,
                 "description": t.description,
                 "input_schema": t.parameters,
-            }
-            for t in tools
-        ]
+            })
+        return result
 
     def _parse_response(self, response) -> LLMResponse:
+        name_map: dict[str, str] = getattr(self, "_tool_name_map", {})
         content = ""
         tool_calls = []
         for block in response.content:
             if block.type == "text":
                 content = block.text
             elif block.type == "tool_use":
-                tool_calls.append(ToolCall(id=block.id, name=block.name, input=block.input))
+                original_name = name_map.get(block.name, block.name)
+                tool_calls.append(ToolCall(id=block.id, name=original_name, input=block.input))
 
         return LLMResponse(
             content=content,
@@ -741,14 +747,14 @@ class OllamaProvider(LLMProvider):
 _PROVIDER_ROUTING: dict[str, tuple[str, str]] = {
     "core":         ("anthropic", "claude-sonnet-4-6"),
     "engineering":  ("anthropic", "claude-sonnet-4-6"),
-    "research":     ("anthropic", "claude-opus-4-7"),
-    "academic":     ("anthropic", "claude-opus-4-7"),
-    "strategy":     ("anthropic", "claude-opus-4-7"),
-    "marketing":    ("gemini",    "gemini-2.5-flash"),
-    "creative":     ("gemini",    "gemini-2.5-flash"),
-    "support":      ("openai",    "gpt-4o-mini"),
+    "research":     ("anthropic", "claude-sonnet-4-6"),
+    "academic":     ("anthropic", "claude-sonnet-4-6"),
+    "strategy":     ("anthropic", "claude-sonnet-4-6"),
+    "marketing":    ("anthropic", "claude-sonnet-4-6"),
+    "creative":     ("anthropic", "claude-sonnet-4-6"),
+    "support":      ("anthropic", "claude-haiku-4-5-20251001"),
     "sales":        ("anthropic", "claude-sonnet-4-6"),
-    "analytics":    ("mistral",   "mistral-large-latest"),
+    "analytics":    ("anthropic", "claude-sonnet-4-6"),
     "local":        ("ollama",    "llama3.2"),
 }
 

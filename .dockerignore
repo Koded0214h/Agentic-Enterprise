@@ -1,0 +1,37 @@
+# Version control
+.git
+.gitignore
+
+# Frontend (not needed in backend image)
+frontend/
+
+# Dev/local files
+**/__pycache__
+**/*.pyc
+**/*.pyo
+*.egg-info
+.env
+.env.*
+!.env.production.example
+
+# Local DBs and artifacts
+backend/db.sqlite3
+backend/chroma_db/
+agent-swarm/memory/chroma/
+agent-swarm/memory/*_latest.md
+agent-swarm/output/
+/tmp/
+
+# Docs and scripts
+docs/
+scripts/
+*.md
+!backend/README.md
+
+# Node modules (agent-swarm JS side)
+agent-swarm/node_modules/
+agent-swarm/dist/
+
+# Test artifacts
+**/.pytest_cache
+**/coverage

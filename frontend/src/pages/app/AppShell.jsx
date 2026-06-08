@@ -58,6 +58,7 @@ export default function AppShell() {
   const [activeCount, setActiveCount] = useState(0)
   const [swarmOpen, setSwarmOpen] = useState(false)
   const [swarmInitialGoal, setSwarmInitialGoal] = useState('')
+  const [swarmProjectId, setSwarmProjectId] = useState('')
   const [bellOpen, setBellOpen] = useState(false)
   const bellRef = useRef(null)
   const { user, logout } = useAuth()
@@ -70,6 +71,7 @@ export default function AppShell() {
     const prompt = params.get('prompt')
     if (prompt && location.pathname === '/app/swarm') {
       setSwarmInitialGoal(decodeURIComponent(prompt))
+      setSwarmProjectId(params.get('project_id') || '')
       setSwarmOpen(true)
       navigate('/app', { replace: true })
     }
@@ -231,8 +233,9 @@ export default function AppShell() {
 
       <SwarmRunDrawer
         open={swarmOpen}
-        onClose={() => { setSwarmOpen(false); setSwarmInitialGoal('') }}
+        onClose={() => { setSwarmOpen(false); setSwarmInitialGoal(''); setSwarmProjectId('') }}
         initialGoal={swarmInitialGoal}
+        projectId={swarmProjectId}
       />
     </div>
   )

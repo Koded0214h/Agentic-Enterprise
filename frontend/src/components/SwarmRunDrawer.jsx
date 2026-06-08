@@ -20,7 +20,7 @@ const TYPED_GOALS = [
   'Start a growth agency powered by autonomous marketing agents',
 ]
 
-export default function SwarmRunDrawer({ open, onClose, initialGoal = '' }) {
+export default function SwarmRunDrawer({ open, onClose, initialGoal = '', projectId = '' }) {
   const [goal, setGoal] = useState('')
 
   // Pre-fill goal when opened from a template redirect
@@ -73,7 +73,9 @@ export default function SwarmRunDrawer({ open, onClose, initialGoal = '' }) {
     setLoading(true)
     setError('')
     try {
-      const data = await api.post('/swarm/run/', { goal: goal.trim(), engine, model: engine === 'claude' ? speed : '' })
+      const payload = { goal: goal.trim(), engine, model: engine === 'claude' ? speed : '' }
+      if (projectId) payload.project_id = projectId
+      const data = await api.post('/swarm/run/', payload)
       onClose()
       setGoal('')
       navigate(`/app/swarm/${data.run_id}`)

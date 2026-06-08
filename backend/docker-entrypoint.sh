@@ -1,21 +1,35 @@
 #!/bin/bash
+set -e
 
-# Wait for database to be ready
-echo "Waiting for postgres..."
+echo "==> Waiting for database..."
+until python -c "
+import os, sys
+import dj_database_url, psycopg2
+url = os.environ.get('DATABASE_URL', '')
+if not url:
+    sys.exit(0)
+cfg = dj_database_url.parse(url)
+try:
+    conn = psycopg2.connect(
+        host=cfg.get('HOST'), port=cfg.get('PORT') or 5432,
+        dbname=cfg.get('NAME'), user=cfg.get('USER'), password=cfg.get('PASSWORD'),
+        connect_timeout=3,
+    )
+    conn.close()
+    sys.exit(0)
+except Exception as e:
+    print(f'  db not ready: {e}')
+    sys.exit(1)
+"; do
+    sleep 2
+done
+echo "==> Database ready."
 
-# If you have netcat installed, you can use it to wait for the port
-# while ! nc -z db 5432; do
-#   sleep 0.1
-# done
+echo "==> Running migrations..."
+python manage.py migrate --noinput
 
-echo "PostgreSQL started"
+echo "==> Collecting static files..."
+python manage.py collectstatic --noinput --clear 2>/dev/null || true
 
-# Apply database migrations
-echo "Apply database migrations"
-python manage.py migrate
-
-# Create superuser if not exists
-# python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(username='admin').exists() or User.objects.create_superuser('admin', 'admin@example.com', 'admin')"
-
-# Start server
+echo "==> Starting server..."
 exec "$@"

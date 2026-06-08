@@ -1,0 +1,72 @@
+version: '3.9'
+
+services:
+  backend:
+    image: ghcr.io/${GITHUB_REPOSITORY}/aos-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - PYTHONPATH=/app/agent-swarm
+    volumes:
+      - media_files:/app/backend/media
+      - static_files:/app/backend/staticfiles
+      - workspace:/tmp/aos-workspace
+    depends_on:
+      - redis
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  celery:
+    image: ghcr.io/${GITHUB_REPOSITORY}/aos-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - PYTHONPATH=/app/agent-swarm
+    working_dir: /app/backend
+    command: celery -A backend worker -l info -c 2
+    volumes:
+      - workspace:/tmp/aos-workspace
+    depends_on:
+      - redis
+
+  celery-beat:
+    image: ghcr.io/${GITHUB_REPOSITORY}/aos-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - PYTHONPATH=/app/agent-swarm
+    working_dir: /app/backend
+    command: celery -A backend beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - media_files:/app/backend/media:ro
+      - static_files:/app/backend/staticfiles:ro
+    depends_on:
+      - backend
+
+volumes:
+  media_files:
+  static_files:
+  redis_data:
+  workspace:

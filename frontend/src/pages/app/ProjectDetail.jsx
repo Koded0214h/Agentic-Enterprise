@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
+  RiAddLine,
   RiArrowLeftLine,
   RiBriefcaseLine,
   RiCheckLine,
+  RiCheckboxCircleLine,
   RiCloseLine,
   RiCpuLine,
   RiFlagLine,
+  RiLoader4Line,
   RiMoneyDollarCircleLine,
   RiRocketLine,
   RiRobot2Line,
@@ -15,6 +18,7 @@ import {
   RiTimeLine,
 } from 'react-icons/ri'
 import { projects as projectsAPI } from '../../api/projects'
+import { swarm as swarmAPI } from '../../api/swarm'
 import { ops } from '../../api/ops'
 import { finance } from '../../api/finance'
 import { agents as agentsAPI } from '../../api/agents'
@@ -22,6 +26,7 @@ import './Projects.css'
 
 export default function ProjectDetail() {
   const { id } = useParams()
+  const [tab, setTab] = useState('overview')
   const [detail, setDetail] = useState(null)
   const [opsSummary, setOpsSummary] = useState(null)
   const [financeSummary, setFinanceSummary] = useState(null)
@@ -123,6 +128,18 @@ export default function ProjectDetail() {
         onGoalAdded={loadProject}
       />
 
+      {/* Tab bar */}
+      <div className="pd-tabs">
+        <button className={tab === 'overview' ? 'active' : ''} onClick={() => setTab('overview')}>Overview</button>
+        <button className={tab === 'runs'     ? 'active' : ''} onClick={() => setTab('runs')}>
+          Runs
+        </button>
+        <button className={tab === 'goals'    ? 'active' : ''} onClick={() => setTab('goals')}>
+          Goals <span className="pd-tab-count">{goals.length}</span>
+        </button>
+      </div>
+
+      {tab === 'overview' && (<>
       <div className="projects-kpis">
         <Kpi icon={<RiMoneyDollarCircleLine size={18} />} label="Usage cost" value={Number(financeUsage.total_cost || 0).toFixed(2)} sub={`${financeUsage.record_count || 0} usage records`} />
         <Kpi icon={<RiCpuLine size={18} />} label="Budget spend" value={Number(financeBudget.current_spend || 0).toFixed(2)} sub={`${financeBudget.percent_used ?? 0}% used`} />
@@ -181,6 +198,159 @@ export default function ProjectDetail() {
           )} />
         </section>
       </div>
+      </>)}
+
+      {tab === 'runs' && <RunsTab projectId={id} />}
+      {tab === 'goals' && <GoalsTab projectId={id} goals={goals} onRefresh={loadProject} />}
+    </div>
+  )
+}
+
+// ─── Runs tab ─────────────────────────────────────────────────────────────────
+function RunsTab({ projectId }) {
+  const [runs, setRuns] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    swarmAPI.list(projectId)
+      .then(d => setRuns(Array.isArray(d) ? d : (d.results || [])))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [projectId])
+
+  // Auto-refresh while any run is still running
+  useEffect(() => {
+    const hasLive = runs.some(r => r.status === 'running')
+    if (!hasLive) return
+    const t = setInterval(() => {
+      swarmAPI.list(projectId)
+        .then(d => setRuns(Array.isArray(d) ? d : (d.results || [])))
+        .catch(() => {})
+    }, 3000)
+    return () => clearInterval(t)
+  }, [runs, projectId])
+
+  if (loading) return <div className="projects-empty" style={{ padding: 24 }}>Loading runs…</div>
+  if (!runs.length) return (
+    <div className="projects-empty-page" style={{ padding: '60px 24px' }}>
+      <div className="projects-empty-page-icon"><RiRocketLine size={28} /></div>
+      <h2>No runs yet</h2>
+      <p>Launch a swarm from the Getting Started panel or the Run Swarm button in the top bar.</p>
+    </div>
+  )
+
+  return (
+    <div className="pd-runs">
+      {runs.map(run => {
+        const isLive    = run.status === 'running'
+        const isOk      = run.status === 'completed'
+        const isFail    = run.status === 'failed'
+        const dur = run.duration_s != null
+          ? `${Math.floor(run.duration_s / 60)}m ${run.duration_s % 60}s`
+          : null
+
+        return (
+          <div key={run.id} className={`pd-run-row ${isLive ? 'live' : ''}`}>
+            <div className="pd-run-status">
+              {isLive  && <RiLoader4Line size={14} className="spin" style={{ color: 'var(--accent)' }} />}
+              {isOk    && <RiCheckLine size={14} style={{ color: 'var(--green)' }} />}
+              {isFail  && <span style={{ color: 'var(--red)', fontSize: 13, fontWeight: 700 }}>✕</span>}
+              {!isLive && !isOk && !isFail && <span className="dot dot-amber" />}
+            </div>
+            <div className="pd-run-body">
+              <div className="pd-run-goal">{run.task_summary || 'Untitled run'}</div>
+              <div className="pd-run-meta">
+                <span className={`badge badge-${isLive ? 'amber' : isOk ? 'green' : isFail ? 'red' : 'amber'}`}>
+                  {run.status}
+                </span>
+                {run.swarm_agent_name && <span className="pd-run-agent">{run.swarm_agent_name}</span>}
+                {run.started_at && <span>{new Date(run.started_at).toLocaleString()}</span>}
+                {dur && <span>{dur}</span>}
+              </div>
+            </div>
+            <Link to={`/app/swarm/${run.id}`} className="btn btn-ghost btn-sm pd-run-link">
+              {isLive ? 'Watch live →' : 'View →'}
+            </Link>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Goals tab ────────────────────────────────────────────────────────────────
+const STATUS_CYCLE = { PLANNED: 'IN_PROGRESS', IN_PROGRESS: 'COMPLETED', COMPLETED: 'PLANNED', BLOCKED: 'PLANNED', CANCELLED: 'PLANNED' }
+const STATUS_COLOR = { PLANNED: 'amber', IN_PROGRESS: 'green', COMPLETED: 'green', BLOCKED: 'red', CANCELLED: 'amber' }
+
+function GoalsTab({ projectId, goals: initialGoals, onRefresh }) {
+  const [goals, setGoals] = useState(initialGoals)
+  const [input, setInput] = useState('')
+  const [adding, setAdding] = useState(false)
+
+  useEffect(() => { setGoals(initialGoals) }, [initialGoals])
+
+  async function addGoal(e) {
+    e.preventDefault()
+    const title = input.trim()
+    if (!title) return
+    setAdding(true)
+    try {
+      const g = await projectsAPI.goals.create({ project: projectId, title, status: 'PLANNED', priority: 1 })
+      setGoals(prev => [g, ...prev])
+      setInput('')
+      onRefresh()
+    } catch {} finally { setAdding(false) }
+  }
+
+  async function cycleStatus(goal) {
+    const next = STATUS_CYCLE[goal.status] || 'PLANNED'
+    try {
+      await projectsAPI.goals.update(goal.id, { status: next })
+      setGoals(prev => prev.map(g => g.id === goal.id ? { ...g, status: next } : g))
+    } catch {}
+  }
+
+  return (
+    <div className="pd-goals">
+      <form className="pd-goals-form" onSubmit={addGoal}>
+        <input
+          className="projects-input"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          placeholder="Add a goal — e.g. Reach 100 paying customers"
+        />
+        <button type="submit" className="btn btn-primary" disabled={adding || !input.trim()}>
+          <RiAddLine size={14} /> {adding ? 'Adding…' : 'Add goal'}
+        </button>
+      </form>
+
+      {goals.length === 0 ? (
+        <div className="projects-empty" style={{ padding: '40px 0', textAlign: 'center' }}>No goals yet — add one above.</div>
+      ) : (
+        <div className="pd-goals-list">
+          {goals.map(g => (
+            <div key={g.id} className="pd-goal-row">
+              <button
+                className={`pd-goal-check pd-goal-check-${STATUS_COLOR[g.status] || 'amber'}`}
+                onClick={() => cycleStatus(g)}
+                title={`Status: ${g.status} — click to advance`}
+                type="button"
+              >
+                {g.status === 'COMPLETED' && <RiCheckboxCircleLine size={18} />}
+                {g.status === 'IN_PROGRESS' && <RiLoader4Line size={18} className="spin" />}
+                {g.status === 'PLANNED' && <RiFlagLine size={18} />}
+                {g.status === 'BLOCKED' && <span style={{ fontSize: 14 }}>⚠</span>}
+              </button>
+              <div className="pd-goal-body">
+                <span className={`pd-goal-title ${g.status === 'COMPLETED' ? 'done' : ''}`}>{g.title}</span>
+                {g.target_metric && <span className="pd-goal-metric">{g.target_metric}</span>}
+              </div>
+              <span className={`badge badge-${STATUS_COLOR[g.status] || 'amber'}`}>{g.status}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -218,7 +388,7 @@ function GettingStarted({ id, goals, projectName, onGoalAdded }) {
     const prompt = goals[0]?.title || projectName || ''
     localStorage.setItem(launchKey, '1')
     setHasLaunched(true)
-    navigate(`/app/swarm?prompt=${encodeURIComponent(prompt)}`)
+    navigate(`/app/swarm?prompt=${encodeURIComponent(prompt)}&project_id=${id}`)
   }
 
   function dismiss() {

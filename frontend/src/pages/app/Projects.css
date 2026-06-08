@@ -805,6 +805,165 @@
   border-top: 1px solid var(--border);
 }
 
+/* ── Project detail tabs ───────────────────────────────────────────────────── */
+.pd-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+
+.pd-tabs button {
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pd-tabs button:hover  { color: var(--text-h); }
+.pd-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.pd-tab-count {
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-radius: 20px;
+  padding: 1px 6px;
+  font-family: var(--mono);
+}
+
+/* ── Runs tab ──────────────────────────────────────────────────────────────── */
+.pd-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.pd-run-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.12s;
+}
+.pd-run-row:last-child { border-bottom: none; }
+.pd-run-row:hover { background: rgba(255,255,255,0.02); }
+.pd-run-row.live { background: rgba(13, 148, 136, 0.04); }
+
+.pd-run-status { flex-shrink: 0; width: 18px; display: grid; place-items: center; }
+
+.pd-run-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+
+.pd-run-goal {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pd-run-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-2);
+  flex-wrap: wrap;
+}
+
+.pd-run-agent {
+  font-family: var(--mono);
+  font-size: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--text);
+}
+
+.pd-run-link { flex-shrink: 0; white-space: nowrap; }
+
+/* ── Goals tab ─────────────────────────────────────────────────────────────── */
+.pd-goals {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pd-goals-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.pd-goals-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.pd-goal-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.12s;
+}
+.pd-goal-row:last-child { border-bottom: none; }
+.pd-goal-row:hover { background: rgba(255,255,255,0.02); }
+
+.pd-goal-check {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  line-height: 1;
+  transition: transform 0.15s, opacity 0.15s;
+}
+.pd-goal-check:hover { transform: scale(1.15); }
+.pd-goal-check-green { color: var(--green); }
+.pd-goal-check-amber { color: var(--amber); }
+.pd-goal-check-red   { color: var(--red); }
+
+.pd-goal-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+
+.pd-goal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.pd-goal-title.done {
+  text-decoration: line-through;
+  color: var(--text);
+  opacity: 0.6;
+}
+
+.pd-goal-metric {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
 /* Getting started card */
 .gs-card {
   padding: 20px 22px;

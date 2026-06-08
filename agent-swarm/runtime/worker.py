@@ -434,9 +434,37 @@ class NativeAgentWorker:
 
     def _build_system_prompt(self, memories: list[str]) -> str:
         prompt = self.agent_def.system_prompt
+
+        # Always inject tool-use instructions so agents don't narrate instead of act
+        tool_names = self.tools.names()
+        if tool_names:
+            tool_list = ", ".join(f"`{t}`" for t in tool_names)
+            prompt += f"""
+
+---
+
+## Tool Use — Critical Instructions
+
+You have access to these tools: {tool_list}
+
+**You MUST call tools to do real work. Do NOT describe or simulate tool calls in text.**
+
+When creating files:
+- Call `file.write` with the exact path and complete file contents
+- One call per file — write complete, production-ready content, no placeholders
+- After every `file.write` call succeeds, confirm with: `[wrote] <path>`
+- Write ALL files the plan specifies before writing any summary text
+
+When running commands:
+- Call `shell.run` — do not just show what you would run
+
+A response that only describes what tools would do has zero real-world effect.
+Act. Don't narrate."""
+
         if memories:
             context = "\n\n".join(f"- {m[:500]}" for m in memories)
-            prompt = f"{prompt}\n\n---\n\n## Relevant context from prior work\n\n{context}"
+            prompt += f"\n\n---\n\n## Relevant context from prior work\n\n{context}"
+
         return prompt
 
     def _report_usage(
