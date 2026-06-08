@@ -16,7 +16,7 @@ services:
     expose:
       - "8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "-H", "Host: 162.35.160.185", "http://localhost:8000/api/health/"]
+      test: ["CMD", "curl", "-f", "-H", "Host: 162.35.160.185", "http://localhost:8000/health/"]
       interval: 30s
       timeout: 10s
       retries: 3
