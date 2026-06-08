@@ -43,6 +43,8 @@ COPY agent-swarm/ agent-swarm/
 WORKDIR /app/backend
 RUN python manage.py collectstatic --noinput --settings=backend.settings || true
 
+RUN chmod +x /app/backend/docker-entrypoint.sh
+
 EXPOSE 8000
 
 ENTRYPOINT ["/app/backend/docker-entrypoint.sh"]
