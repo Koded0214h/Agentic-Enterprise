@@ -107,7 +107,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          port: ${{ secrets.SERVER_PORT || 22 }}
+          port: 22
           script: |
             set -e
             cd /opt/aos
@@ -115,17 +115,17 @@ jobs:
             # Pull latest code for compose files + nginx config
             git pull origin main
 
-            # Log in to GHCR on the server
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            # Log in to GHCR using PAT
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io \
               -u ${{ github.actor }} --password-stdin
 
             # Pull new image
             export IMAGE_TAG=${{ needs.build.outputs.image_tag }}
+            export GITHUB_REPOSITORY=${{ github.repository }}
             docker compose -f docker-compose.prod.yml pull backend celery celery-beat
 
-            # Rolling restart (zero-ish downtime)
-            docker compose -f docker-compose.prod.yml up -d --no-deps --remove-orphans \
-              backend celery celery-beat nginx
+            # Rolling restart
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
             # Cleanup old images
             docker image prune -f
