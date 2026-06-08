@@ -1,3 +1,4 @@
+import os
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -41,8 +42,10 @@ class OrchestrationAndTraceTests(TestCase):
         )
         self.cap.sub_agents.add(self.sub_agent)
 
-    def test_supervisor_graph_compilation(self):
+    @patch('apps.agent_intelligence.utils.agent_factory.LLMManager.get_llm')
+    def test_supervisor_graph_compilation(self, mock_get_llm):
         """Verify that the supervisor graph can be compiled correctly."""
+        mock_get_llm.return_value = MagicMock()
         app = LangGraphAgentFactory.create_agent(self.supervisor)
         self.assertIsNotNone(app)
         
