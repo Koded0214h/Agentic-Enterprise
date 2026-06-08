@@ -15,7 +15,11 @@ SECRET_KEY = os.environ.get(
 
 DEBUG = os.environ.get("DEBUG", "1") == "1"
 
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost 127.0.0.1").split()
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in os.environ.get("ALLOWED_HOSTS", "localhost 127.0.0.1").replace(",", " ").split()
+    if h.strip()
+]
 
 # Production security headers (no-op when DEBUG=True)
 SECURE_BROWSER_XSS_FILTER = True
