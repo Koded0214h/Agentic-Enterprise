@@ -2,7 +2,7 @@ version: '3.9'
 
 services:
   backend:
-    image: ghcr.io/${GITHUB_REPOSITORY}/aos-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_REPOSITORY:-koded0214h/agentic-enterprise}/aos-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -22,7 +22,7 @@ services:
       retries: 3
 
   celery:
-    image: ghcr.io/${GITHUB_REPOSITORY}/aos-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_REPOSITORY:-koded0214h/agentic-enterprise}/aos-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -35,7 +35,7 @@ services:
       - redis
 
   celery-beat:
-    image: ghcr.io/${GITHUB_REPOSITORY}/aos-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_REPOSITORY:-koded0214h/agentic-enterprise}/aos-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
