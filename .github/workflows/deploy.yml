@@ -32,6 +32,8 @@ jobs:
       REDIS_URL: redis://localhost:6379
       SECRET_KEY: ci-test-secret-not-for-production
       DEBUG: "False"
+      GOOGLE_API_KEY: ci-dummy-not-real
+      ANTHROPIC_API_KEY: ci-dummy-not-real
       ALLOWED_HOSTS: localhost
     steps:
       - uses: actions/checkout@v4

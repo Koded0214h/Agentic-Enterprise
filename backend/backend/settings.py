@@ -21,7 +21,8 @@ ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost 127.0.0.1").split()
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
-if not DEBUG:
+# SSL redirect is opt-in via SECURE_SSL=1 so CI (DEBUG=False) doesn't break tests
+if os.environ.get("SECURE_SSL", "0") == "1":
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True

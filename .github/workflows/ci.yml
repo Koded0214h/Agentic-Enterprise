@@ -32,6 +32,8 @@ jobs:
       SECRET_KEY: ci-test-secret-key-not-for-production
       DEBUG: "False"
       ALLOWED_HOSTS: localhost
+      GOOGLE_API_KEY: ci-dummy-not-real
+      ANTHROPIC_API_KEY: ci-dummy-not-real
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
