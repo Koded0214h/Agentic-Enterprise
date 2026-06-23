@@ -115,12 +115,17 @@ jobs:
             set -e
             cd /opt/aos
 
-            # Pull latest code for compose files + nginx config
-            git pull origin main
+            # Pull latest code — reset hard so local edits never block deploys
+            git fetch origin main
+            git reset --hard origin/main
 
             # Log in to GHCR using PAT
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io \
               -u ${{ github.actor }} --password-stdin
+
+            # Free build cache if disk is >80% full
+            DISK_USE=$(df / | awk 'NR==2{print $5}' | tr -d '%')
+            [ "$DISK_USE" -gt 80 ] && docker builder prune -af || true
 
             # Pull new image — repo name must be lowercase for GHCR
             export IMAGE_TAG=${{ needs.build.outputs.image_tag }}
