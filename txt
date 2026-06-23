@@ -1,0 +1,240 @@
+
+Skip to content
+
+    Koded0214h
+    Agentic-Enterprise
+
+Repository navigation
+
+    Code
+    Issues
+    Pull requests
+    Agents
+    Actions
+    Projects
+    Wiki
+    Security and quality
+    Insights
+    Settings
+
+Deploy
+fix(ci): use GHCR_PAT for server-side image pull in deploy job #2
+
+    All jobs
+    Run details
+
+Annotations
+1 error and 1 warning
+Backend Tests
+failed 1 minute ago in 4m 18s
+1s
+29s
+3s
+5s
+2m 0s
+16s
+1m 18s
+test_requires_auth (apps.swarm_bridge.tests.SwarmExecutionContextDetailViewTest.test_requires_auth) ... FAIL
+test_kb_query_echoes_query_string (apps.swarm_bridge.tests.SwarmKBQueryViewTest.test_kb_query_echoes_query_string) ... ERROR
+test_kb_query_missing_q_returns_400 (apps.swarm_bridge.tests.SwarmKBQueryViewTest.test_kb_query_missing_q_returns_400) ... FAIL
+test_kb_query_no_collections_returns_empty_list (apps.swarm_bridge.tests.SwarmKBQueryViewTest.test_kb_query_no_collections_returns_empty_list) ... FAIL
+test_kb_query_respects_top_k_parameter (apps.swarm_bridge.tests.SwarmKBQueryViewTest.test_kb_query_respects_top_k_parameter) ... FAIL
+test_kb_query_returns_200_with_results_list (apps.swarm_bridge.tests.SwarmKBQueryViewTest.test_kb_query_returns_200_with_results_list) ... FAIL
+test_kb_query_top_k_out_of_range_returns_400 (apps.swarm_bridge.tests.SwarmKBQueryViewTest.test_kb_query_top_k_out_of_range_returns_400) ... FAIL
+test_requires_auth (apps.swarm_bridge.tests.SwarmKBQueryViewTest.test_requires_auth) ... FAIL
+test_budget_exceeded_returns_deny (apps.swarm_bridge.tests.SwarmPolicyCheckViewTest.test_budget_exceeded_returns_deny) ... FAIL
+test_creates_execution_context (apps.swarm_bridge.tests.SwarmPolicyCheckViewTest.test_creates_execution_context) ... FAIL
+test_execution_context_stores_agent_name (apps.swarm_bridge.tests.SwarmPolicyCheckViewTest.test_execution_context_stores_agent_name) ... ERROR
+test_known_agent_with_global_allow_policy (apps.swarm_bridge.tests.SwarmPolicyCheckViewTest.test_known_agent_with_global_allow_policy) ... FAIL
+test_known_agent_with_targeted_deny_policy (apps.swarm_bridge.tests.SwarmPolicyCheckViewTest.test_known_agent_with_targeted_deny_policy) ... FAIL
+test_policy_decision_persisted_on_context (apps.swarm_bridge.tests.SwarmPolicyCheckViewTest.test_policy_decision_persisted_on_context) ... ERROR
+test_requires_auth (apps.swarm_bridge.tests.SwarmPolicyCheckViewTest.test_requires_auth) ... FAIL
+test_response_includes_execution_id (apps.swarm_bridge.tests.SwarmPolicyCheckViewTest.test_response_includes_execution_id) ... ERROR
+test_same_execution_id_is_idempotent (apps.swarm_bridge.tests.SwarmPolicyCheckViewTest.test_same_execution_id_is_idempotent) ... FAIL
+test_unknown_agent_defaults_to_allow (apps.swarm_bridge.tests.SwarmPolicyCheckViewTest.test_unknown_agent_defaults_to_allow) ... FAIL
+test_multiple_phases_create_separate_trace_steps (apps.swarm_bridge.tests.SwarmTraceEventViewTest.test_multiple_phases_create_separate_trace_steps) ... FAIL
+test_requires_auth (apps.swarm_bridge.tests.SwarmTraceEventViewTest.test_requires_auth) ... FAIL
+test_trace_event_creates_conversation_anchor (apps.swarm_bridge.tests.SwarmTraceEventViewTest.test_trace_event_creates_conversation_anchor) ... FAIL
+test_trace_event_creates_trace_step (apps.swarm_bridge.tests.SwarmTraceEventViewTest.test_trace_event_creates_trace_step) ... FAIL
+test_trace_event_returns_recorded (apps.swarm_bridge.tests.SwarmTraceEventViewTest.test_trace_event_returns_recorded) ... FAIL
+test_trace_step_id_in_response (apps.swarm_bridge.tests.SwarmTraceEventViewTest.test_trace_step_id_in_response) ... ERROR
+test_unknown_execution_id_returns_404 (apps.swarm_bridge.tests.SwarmTraceEventViewTest.test_unknown_execution_id_returns_404) ... FAIL
+test_report_usage_creates_usage_record (apps.swarm_bridge.tests.SwarmUsageReportViewTest.test_report_usage_creates_usage_record) ... ERROR
+test_report_usage_id_in_response (apps.swarm_bridge.tests.SwarmUsageReportViewTest.test_report_usage_id_in_response) ... ERROR
+test_report_usage_returns_recorded (apps.swarm_bridge.tests.SwarmUsageReportViewTest.test_report_usage_returns_recorded) ... FAIL
+test_report_usage_updates_context_metrics (apps.swarm_bridge.tests.SwarmUsageReportViewTest.test_report_usage_updates_context_metrics) ... FAIL
+test_report_zero_cost_no_budget_update (apps.swarm_bridge.tests.SwarmUsageReportViewTest.test_report_zero_cost_no_budget_update) ... FAIL
+test_requires_auth (apps.swarm_bridge.tests.SwarmUsageReportViewTest.test_requires_auth) ... FAIL
+test_unknown_execution_id_returns_404 (apps.swarm_bridge.tests.SwarmUsageReportViewTest.test_unknown_execution_id_returns_404) ... FAIL
+test_empty_list (test_mrr_calculator.TestMRRCalculator.test_empty_list) ... ok
+test_float_subscriptions (test_mrr_calculator.TestMRRCalculator.test_float_subscriptions) ... ok
+test_large_number_of_subscriptions (test_mrr_calculator.TestMRRCalculator.test_large_number_of_subscriptions) ... ok
+test_multiple_subscriptions (test_mrr_calculator.TestMRRCalculator.test_multiple_subscriptions) ... ok
+test_single_subscription (test_mrr_calculator.TestMRRCalculator.test_single_subscription) ... ok
+test_subscriptions_with_zero (test_mrr_calculator.TestMRRCalculator.test_subscriptions_with_zero) ... ok
+test_type_error_non_list_input (test_mrr_calculator.TestMRRCalculator.test_type_error_non_list_input) ... ok
+test_type_error_non_numeric_amounts (test_mrr_calculator.TestMRRCalculator.test_type_error_non_numeric_amounts) ... ok
+test_value_error_negative_amounts (test_mrr_calculator.TestMRRCalculator.test_value_error_negative_amounts) ... ok
+
+======================================================================
+ERROR: test_logout_revokes_session (apps.agent_gateway.tests.AgentLogoutViewTest.test_logout_revokes_session)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/agent_gateway/tests.py", line 88, in test_logout_revokes_session
+    login_data = self._login()
+                 ^^^^^^^^^^^^^
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/agent_gateway/tests.py", line 85, in _login
+    return self.client.post(url, data, format="json").data
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'HttpResponsePermanentRedirect' object has no attribute 'data'
+
+======================================================================
+ERROR: test_staff_flag_reflected (apps.agent_gateway.tests.UserMeViewTest.test_staff_flag_reflected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/agent_gateway/tests.py", line 195, in test_staff_flag_reflected
+    self.assertTrue(response.data["is_staff"])
+                    ^^^^^^^^^^^^^
+AttributeError: 'HttpResponsePermanentRedirect' object has no attribute 'data'
+
+======================================================================
+ERROR: test_supervisor_graph_compilation (apps.agent_intelligence.tests.OrchestrationAndTraceTests.test_supervisor_graph_compilation)
+Verify that the supervisor graph can be compiled correctly.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/agent_intelligence/tests.py", line 46, in test_supervisor_graph_compilation
+    app = LangGraphAgentFactory.create_agent(self.supervisor)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/agent_intelligence/utils/agent_factory.py", line 49, in create_agent
+    return cls.create_supervisor_agent(agent, cap)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/agent_intelligence/utils/agent_factory.py", line 70, in create_supervisor_agent
+    llm = LLMManager.get_llm(capability.primary_llm)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/agent_intelligence/utils/llm_manager.py", line 38, in get_llm
+    return ChatGoogleGenerativeAI(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/langchain_google_genai/chat_models.py", line 2269, in __init__
+    super().__init__(**kwargs)
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/langchain_core/load/serializable.py", line 118, in __init__
+    super().__init__(*args, **kwargs)
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/pydantic/main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 1 validation error for ChatGoogleGenerativeAI
+  Value error, API key required for Gemini Developer API. Provide api_key parameter or set GOOGLE_API_KEY/GEMINI_API_KEY environment variable. [type=value_error, input_value={'model': 'gemini-pro', '...rue, 'model_kwargs': {}}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/value_error
+
+======================================================================
+ERROR: test_get_or_create_collection (apps.knowledge_base.tests.VectorStoreServiceTest.test_get_or_create_collection)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/unittest/mock.py", line 1396, in patched
+    return func(*newargs, **newkeywargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/knowledge_base/tests.py", line 534, in test_get_or_create_collection
+    collection = service.get_or_create_collection(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/knowledge_base/services/vector_store.py", line 50, in get_or_create_collection
+    embedding_fn = GooglePalmEmbeddingFunction(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/chromadb/utils/embedding_functions/google_embedding_function.py", line 192, in __init__
+    raise ValueError(
+ValueError: The CHROMA_GOOGLE_PALM_API_KEY environment variable is not set.
+
+======================================================================
+ERROR: test_similarity_search (apps.knowledge_base.tests.VectorStoreServiceTest.test_similarity_search)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/unittest/mock.py", line 1396, in patched
+    return func(*newargs, **newkeywargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/knowledge_base/tests.py", line 581, in test_similarity_search
+    results = service.similarity_search("test-id", "query", k=1)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/knowledge_base/services/vector_store.py", line 120, in similarity_search
+    collection = self.get_or_create_collection(collection_id)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/knowledge_base/services/vector_store.py", line 50, in get_or_create_collection
+    embedding_fn = GooglePalmEmbeddingFunction(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/chromadb/utils/embedding_functions/google_embedding_function.py", line 192, in __init__
+    raise ValueError(
+ValueError: The CHROMA_GOOGLE_PALM_API_KEY environment variable is not set.
+
+======================================================================
+ERROR: test_queue_item_list_scoped_to_owner (apps.ops_core.tests.QueueItemModelTests.test_queue_item_list_scoped_to_owner)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/ops_core/tests.py", line 308, in test_queue_item_list_scoped_to_owner
+    self.assertEqual(len(resp.data), 1)
+                         ^^^^^^^^^
+AttributeError: 'HttpResponsePermanentRedirect' object has no attribute 'data'
+
+======================================================================
+ERROR: test_duplicate_preserves_resources (apps.policy_engine.tests.PolicyViewSetTest.test_duplicate_preserves_resources)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/policy_engine/tests.py", line 411, in test_duplicate_preserves_resources
+    self.assertEqual(copy.resources, ["tool:crm", "tool:email"])
+                     ^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'resources'
+
+======================================================================
+ERROR: test_filter_by_effect (apps.policy_engine.tests.PolicyViewSetTest.test_filter_by_effect)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/policy_engine/tests.py", line 418, in test_filter_by_effect
+    self.assertEqual(len(response.data), 1)
+                         ^^^^^^^^^^^^^
+AttributeError: 'HttpResponsePermanentRedirect' object has no attribute 'data'
+
+======================================================================
+ERROR: test_register_agent_identity_key_prefixed_swarm (apps.swarm_bridge.tests.SwarmAgentRegisterViewTest.test_register_agent_identity_key_prefixed_swarm)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/swarm_bridge/tests.py", line 90, in test_register_agent_identity_key_prefixed_swarm
+    self.assertTrue(response.data["identity_key"].startswith("swarm_"))
+                    ^^^^^^^^^^^^^
+AttributeError: 'HttpResponsePermanentRedirect' object has no attribute 'data'
+
+======================================================================
+ERROR: test_context_response_contains_expected_fields (apps.swarm_bridge.tests.SwarmExecutionContextDetailViewTest.test_context_response_contains_expected_fields)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/swarm_bridge/tests.py", line 430, in test_context_response_contains_expected_fields
+    self.assertIn(field, response.data)
+                         ^^^^^^^^^^^^^
+AttributeError: 'HttpResponsePermanentRedirect' object has no attribute 'data'
+
+======================================================================
+ERROR: test_kb_query_echoes_query_string (apps.swarm_bridge.tests.SwarmKBQueryViewTest.test_kb_query_echoes_query_string)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/swarm_bridge/tests.py", line 380, in test_kb_query_echoes_query_string
+    self.assertEqual(response.data["query"], "sales pipeline optimisation")
+                     ^^^^^^^^^^^^^
+AttributeError: 'HttpResponsePermanentRedirect' object has no attribute 'data'
+
+======================================================================
+ERROR: test_execution_context_stores_agent_name (apps.swarm_bridge.tests.SwarmPolicyCheckViewTest.test_execution_context_stores_agent_name)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/Agentic-Enterprise/Agentic-Enterprise/backend/apps/swarm_bridge/tests.py", line 167, in test_execution_context_stores_agent_name
+    ctx = SwarmExecutionContext.objects.get(id=eid)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/django/db/models/query.py", line 635, in get
+    raise self.model.DoesNotExist(
+apps.swarm_bridge.models.SwarmExecutionContext.DoesNotExist: SwarmExecutionContext matching query does not exist.
+
+======================================================================
+ERROR: test_policy_decision_persisted_on_context (apps.swarm_bridge.tests.SwarmPolicyCheckViewTest.test_policy_decision_persisted_on_context)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+0s
+0s
+3s
+0s

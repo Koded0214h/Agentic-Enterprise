@@ -226,11 +226,7 @@ GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "")
 
 # CORS — allow the future frontend + Swagger UI
-CORS_ALLOWED_ORIGINS = os.environ.get(
-    "CORS_ALLOWED_ORIGINS",
-    "http://localhost:3000 http://localhost:5173 http://127.0.0.1:3000",
-).split()
-CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = True
 
 # Vector store
 VECTOR_STORE_PATH = os.path.join(BASE_DIR, "chroma_db")
