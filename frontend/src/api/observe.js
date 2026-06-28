@@ -1,22 +1,29 @@
 import { api } from './client'
 
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+const BASE = (import.meta.env.VITE_API_URL || 'https://aos-api.viewdns.net/api').replace(/\/+$/, '')
+
+function qs(params = {}) {
+  const filtered = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  const query = new URLSearchParams(filtered).toString()
+  return query ? `?${query}` : ''
+}
 
 export const observe = {
   tasks: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
-    return api.get(`/intelligence/tasks/${qs ? '?' + qs : ''}`)
+    return api.get(`/intelligence/tasks/${qs(params)}`)
       .then(d => Array.isArray(d) ? { results: d, count: d.length } : d)
   },
   conversations: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
-    return api.get(`/intelligence/conversations/${qs ? '?' + qs : ''}`)
+    return api.get(`/intelligence/conversations/${qs(params)}`)
       .then(d => Array.isArray(d) ? { results: d, count: d.length } : d)
   },
   executionReplay: (executionId) =>
     api.get(`/swarm/executions/${executionId}/replay/`),
 
-  recentRuns: (type = 'template') => api.get(`/swarm/executions/?type=${type}`),
+  recentRuns: (params = 'template') => {
+    const queryParams = typeof params === 'string' ? { type: params } : params
+    return api.get(`/swarm/executions/${qs(queryParams)}`)
+  },
   failureAnalytics: () => api.get('/intelligence/analytics/failures/'),
   retryAnalytics: () => api.get('/intelligence/analytics/retries/'),
   workflowGraph: () => api.get('/intelligence/analytics/workflow-graph/'),
