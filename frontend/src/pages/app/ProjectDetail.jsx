@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   RiAddLine,
@@ -416,11 +416,10 @@ function RunsTab({ projectId }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
     swarmAPI
       .list(projectId)
       .then((d) => setRuns(Array.isArray(d) ? d : d.results || []))
-      .catch(() => {})
+      .catch(() => undefined)
       .finally(() => setLoading(false));
   }, [projectId]);
 
@@ -432,7 +431,7 @@ function RunsTab({ projectId }) {
       swarmAPI
         .list(projectId)
         .then((d) => setRuns(Array.isArray(d) ? d : d.results || []))
-        .catch(() => {});
+        .catch(() => undefined);
     }, 3000);
     return () => clearInterval(t);
   }, [runs, projectId]);
@@ -545,10 +544,6 @@ function GoalsTab({ projectId, goals: initialGoals, onRefresh }) {
   const [input, setInput] = useState("");
   const [adding, setAdding] = useState(false);
 
-  useEffect(() => {
-    setGoals(initialGoals);
-  }, [initialGoals]);
-
   async function addGoal(e) {
     e.preventDefault();
     const title = input.trim();
@@ -565,6 +560,7 @@ function GoalsTab({ projectId, goals: initialGoals, onRefresh }) {
       setInput("");
       onRefresh();
     } catch {
+      // keep the inline goal form quiet; project refresh handles server truth
     } finally {
       setAdding(false);
     }
@@ -577,7 +573,9 @@ function GoalsTab({ projectId, goals: initialGoals, onRefresh }) {
       setGoals((prev) =>
         prev.map((g) => (g.id === goal.id ? { ...g, status: next } : g)),
       );
-    } catch {}
+    } catch {
+      // keep the current local state if the backend rejects the status change
+    }
   }
 
   return (
