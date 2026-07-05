@@ -66,6 +66,7 @@ export default function ProjectTimeline() {
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('all')
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [id])
 
   async function load() {

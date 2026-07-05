@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api } from './client.js'
 
 function qs(params = {}) {
   const filtered = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
@@ -14,6 +14,14 @@ export const projects = {
   update: (id, data) => api.patch(`/projects/projects/${id}/`, data),
   delete: (id) => api.delete(`/projects/projects/${id}/`),
   archive: (id) => api.post(`/projects/projects/${id}/archive/`, {}),
+  pauseAutomation: (id) => api.patch(`/projects/projects/${id}/`, { status: 'PAUSED' }),
+  resumeAutomation: (id) => api.patch(`/projects/projects/${id}/`, { status: 'ACTIVE' }),
+  intervene: (id, data) => api.post(`/projects/projects/${id}/activity/`, {
+    kind: 'operator.intervention',
+    summary: data.action,
+    body: data.reason,
+    metadata: { action: data.action, source: 'command-center' },
+  }),
   addMember: (id, data) => api.post(`/projects/projects/${id}/add_member/`, data),
   activity: (id, data) => api.post(`/projects/projects/${id}/activity/`, data),
   goals: {

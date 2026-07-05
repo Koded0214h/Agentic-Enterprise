@@ -13,6 +13,10 @@
 .inbox-empty span { font-size: 13px; }
 
 .inbox-list { display: flex; flex-direction: column; gap: 10px; }
+.inbox-project-filter { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.inbox-project-filter label { color: var(--text-2); font-size: 12px; font-weight: 700; }
+.inbox-project-filter select { min-width: 220px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg-2); color: var(--text-h); }
+.inbox-row-actions { display: flex; gap: 7px; flex-shrink: 0; }
 
 .inbox-card {
   display: flex;
