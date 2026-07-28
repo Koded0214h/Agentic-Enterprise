@@ -15,7 +15,6 @@ import './ProjectSettings.css'
 const STAGES     = ['IDEA', 'MVP', 'LAUNCH', 'GROWTH', 'SCALE']
 const MODES      = ['standard', 'conservative', 'aggressive', 'autonomous']
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'NGN', 'JPY']
-const ROLES      = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']
 
 export default function ProjectSettings() {
   const { id } = useParams()
@@ -43,8 +42,6 @@ export default function ProjectSettings() {
   const [deleting,     setDeleting]     = useState(false)
   const [archiving,    setArchiving]    = useState(false)
 
-  useEffect(() => { load() }, [id])
-
   async function load() {
     setLoading(true)
     setLoadErr('')
@@ -68,6 +65,13 @@ export default function ProjectSettings() {
       setLoading(false)
     }
   }
+
+  // `id` is the project boundary; loading is intentionally re-run when it changes.
+  useEffect(() => {
+    const timer = window.setTimeout(load, 0)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
 
   async function saveGeneral(e) {
     e.preventDefault()

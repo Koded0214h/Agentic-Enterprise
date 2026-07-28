@@ -1,210 +1,98 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import {
-  RiShieldCheckLine, RiArrowRightLine, RiTimeLine,
-  RiAlertLine, RiCheckLine, RiCloseLine,
-} from 'react-icons/ri'
-import { agents as agentsAPI } from '../../api/agents'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { RiArrowRightLine, RiCheckLine, RiCloseLine, RiShieldCheckLine, RiTimeLine } from 'react-icons/ri'
+import { agents } from '../../api/agents'
+import { projects } from '../../api/projects'
 import './ApprovalsInbox.css'
 
-const MOCK = [
-  {
-    id: 'ap_001',
-    agent: 'Finance Monitor',
-    action: 'Wire transfer $12,400 to vendor ACME Corp via tool:payment',
-    risk: 'high',
-    risk_score: 88,
-    policy: 'SOX — Escalate Agent-Initiated Financial Transactions',
-    created: '2m ago',
-    workflow: 'wf_outbound_sales',
-    env: 'prod',
-  },
-  {
-    id: 'ap_002',
-    agent: 'Growth Lead',
-    action: 'Publish press release to PR Newswire — 800 word announcement',
-    risk: 'medium',
-    risk_score: 54,
-    policy: 'Global Allow — External Publish Threshold',
-    created: '8m ago',
-    workflow: 'wf_content_engine',
-    env: 'prod',
-  },
-  {
-    id: 'ap_003',
-    agent: 'Sales Navigator',
-    action: 'Send contract (PDF, $24,000 ACV) to enterprise prospect via DocuSign',
-    risk: 'medium',
-    risk_score: 61,
-    policy: 'Enterprise Contract Approval Gate',
-    created: '14m ago',
-    workflow: 'wf_outbound_sales',
-    env: 'prod',
-  },
-]
-
-const RISK_COLOR = { high: 'red', medium: 'amber', low: 'green' }
+const DECIDED = new Set(['APPROVED', 'DENIED', 'EXPIRED'])
 
 export default function ApprovalsInbox() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [projectOptions, setProjectOptions] = useState([])
+  const [projectId, setProjectId] = useState(searchParams.get('project_id') || '')
   const [tab, setTab] = useState('pending')
-  const [items, setItems] = useState(MOCK)
-  const [escalated, setEscalated] = useState([])
-  const [overriding, setOverriding] = useState(null) // action id being overridden
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [deciding, setDeciding] = useState('')
 
   useEffect(() => {
-    agentsAPI.pendingActions()
-      .then(d => { if (d?.results?.length) setItems(d.results) })
-      .catch(() => {})
+    projects.list()
+      .then((data) => setProjectOptions(Array.isArray(data) ? data : data.results || []))
+      .catch(() => setProjectOptions([]))
   }, [])
 
   useEffect(() => {
-    if (tab === 'escalated') {
-      agentsAPI.escalations()
-        .then(d => setEscalated(d?.escalated || []))
-        .catch(() => {})
-    }
-  }, [tab])
+    let cancelled = false
+    agents.pendingActions(projectId ? { project_id: projectId } : {})
+      .then((data) => { if (!cancelled) setItems(data?.results || []) })
+      .catch((err) => { if (!cancelled) setError(err?.data?.detail || err.message || 'Failed to load approvals') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [projectId])
 
-  async function handleOverride(actionId, decision) {
-    setOverriding(actionId)
+  function selectProject(value) {
+    setLoading(true)
+    setError('')
+    setProjectId(value)
+    setSearchParams(value ? { project_id: value } : {})
+  }
+
+  async function decide(actionId, decision) {
+    setDeciding(actionId)
+    setError('')
     try {
-      if (decision === 'APPROVED') {
-        await agentsAPI.approve(actionId)
-      } else {
-        await agentsAPI.reject(actionId)
-      }
-      setEscalated(prev => prev.filter(a => a.id !== actionId))
-    } catch {
-      // swallow — show nothing on error
+      if (decision === 'APPROVED') await agents.approve(actionId, { decision })
+      else await agents.reject(actionId, { decision })
+      setItems((current) => current.map((item) => item.id === actionId ? { ...item, status: decision } : item))
+    } catch (err) {
+      setError(err?.data?.error || err?.data?.detail || err.message || 'Unable to save decision')
     } finally {
-      setOverriding(null)
+      setDeciding('')
     }
   }
+
+  const visible = items.filter((item) => tab === 'pending' ? !DECIDED.has(item.status) : DECIDED.has(item.status))
+  const pendingCount = items.filter((item) => !DECIDED.has(item.status)).length
 
   return (
     <div className="inbox-page">
       <div className="page-header">
-        <div className="page-header-left">
-          <h1>Approvals</h1>
-          <p>High-risk agent actions paused for your review</p>
-        </div>
-        <span className="badge badge-amber">{items.length} pending</span>
+        <div className="page-header-left"><h1>Approvals</h1><p>Project-scoped agent actions paused for review</p></div>
+        <span className={`badge badge-${pendingCount ? 'amber' : 'green'}`}>{pendingCount} pending</span>
       </div>
+
+      <div className="inbox-project-filter card">
+        <label htmlFor="approval-project">Project</label>
+        <select id="approval-project" value={projectId} onChange={(event) => selectProject(event.target.value)}>
+          <option value="">All my projects</option>
+          {projectOptions.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+        </select>
+      </div>
+
+      {error && <div className="projects-error">{error}</div>}
 
       <div className="inbox-tabs">
-        <button
-          className={`inbox-tab${tab === 'pending' ? ' inbox-tab--active' : ''}`}
-          onClick={() => setTab('pending')}
-        >
-          Pending
-          {items.length > 0 && (
-            <span className="inbox-tab-count">{items.length}</span>
-          )}
-        </button>
-        <button
-          className={`inbox-tab${tab === 'escalated' ? ' inbox-tab--active' : ''}`}
-          onClick={() => setTab('escalated')}
-        >
-          Escalated
-          {escalated.length > 0 && (
-            <span className="inbox-tab-count inbox-tab-count--red">{escalated.length}</span>
-          )}
-        </button>
+        <button className={`inbox-tab${tab === 'pending' ? ' inbox-tab--active' : ''}`} onClick={() => setTab('pending')}>Pending <span className="inbox-tab-count">{pendingCount}</span></button>
+        <button className={`inbox-tab${tab === 'decided' ? ' inbox-tab--active' : ''}`} onClick={() => setTab('decided')}>Decided</button>
       </div>
 
-      {tab === 'pending' && (
-        <>
-          {items.length === 0 ? (
-            <div className="inbox-empty card">
-              <RiShieldCheckLine size={32} color="var(--green)" />
-              <p>All clear — no pending approvals</p>
-              <span>All agents are operating within policy</span>
+      {loading ? <div className="inbox-empty card"><p>Loading approvals…</p></div> : visible.length === 0 ? (
+        <div className="inbox-empty card"><RiShieldCheckLine size={32} color="var(--green)" /><p>{tab === 'pending' ? 'No pending approvals' : 'No decided approvals'}</p><span>{projectId ? 'Nothing in this project needs attention.' : 'Nothing across your projects needs attention.'}</span></div>
+      ) : (
+        <div className="inbox-list">
+          {visible.map((item) => (
+            <div key={item.id} className="inbox-card card">
+              <div className="inbox-card-body">
+                <div className="inbox-card-top"><span className="inbox-agent">{item.agent_name || 'Agent'}</span><span className={`badge badge-${item.status === 'PENDING' ? 'amber' : item.status === 'APPROVED' ? 'green' : 'red'}`}>{item.status || 'PENDING'}</span></div>
+                <p className="inbox-action">{item.action_type || 'Agent action'} · {item.resource || 'No resource supplied'}</p>
+                <div className="inbox-meta">{item.reason && <span className="inbox-policy">{item.reason}</span>}<span className="inbox-time"><RiTimeLine size={11} /> {item.created_at ? new Date(item.created_at).toLocaleString() : 'Time unavailable'}</span></div>
+              </div>
+              {tab === 'pending' ? <div className="inbox-row-actions"><button className="btn btn-sm btn-ghost inbox-override-reject" disabled={Boolean(deciding)} onClick={() => decide(item.id, 'DENIED')}><RiCloseLine size={14} /> Reject</button><button className="btn btn-sm btn-primary" disabled={Boolean(deciding)} onClick={() => decide(item.id, 'APPROVED')}><RiCheckLine size={14} /> {deciding === item.id ? 'Saving…' : 'Approve'}</button></div> : <Link to={`/app/approvals/${item.id}`} aria-label="View approval"><RiArrowRightLine className="inbox-arrow" size={16} /></Link>}
             </div>
-          ) : (
-            <div className="inbox-list">
-              {items.map(item => (
-                <Link key={item.id} to={`/app/approvals/${item.id}`} className="inbox-card card">
-                  <div className="inbox-card-left">
-                    <div className="inbox-risk-score" data-risk={item.risk}>
-                      {item.risk_score}
-                    </div>
-                  </div>
-                  <div className="inbox-card-body">
-                    <div className="inbox-card-top">
-                      <span className="inbox-agent">{item.agent}</span>
-                      <span className="inbox-env badge badge-purple">{item.env}</span>
-                    </div>
-                    <p className="inbox-action">{item.action}</p>
-                    <div className="inbox-meta">
-                      <span className={`badge badge-${RISK_COLOR[item.risk]}`}>{item.risk} risk</span>
-                      <span className="inbox-policy">{item.policy}</span>
-                      <span className="inbox-time"><RiTimeLine size={11} /> {item.created}</span>
-                    </div>
-                  </div>
-                  <RiArrowRightLine className="inbox-arrow" size={16} />
-                </Link>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {tab === 'escalated' && (
-        <>
-          {escalated.length === 0 ? (
-            <div className="inbox-empty card">
-              <RiShieldCheckLine size={32} color="var(--green)" />
-              <p>No escalated actions</p>
-              <span>Council has resolved all queued decisions</span>
-            </div>
-          ) : (
-            <div className="inbox-list">
-              {escalated.map(action => (
-                <div key={action.id} className="inbox-card card inbox-escalated-card">
-                  <div className="inbox-card-left">
-                    <div className="inbox-escalated-icon">
-                      <RiAlertLine size={20} color="var(--amber)" />
-                    </div>
-                  </div>
-                  <div className="inbox-card-body">
-                    <div className="inbox-card-top">
-                      <span className="inbox-agent">{action.agent_name}</span>
-                      <span className="badge badge-amber">escalated</span>
-                    </div>
-                    <p className="inbox-action">{action.action_type}</p>
-                    {action.description && (
-                      <p className="inbox-escalated-reason">{action.description}</p>
-                    )}
-                    <div className="inbox-meta">
-                      <span className="inbox-time">
-                        <RiTimeLine size={11} />
-                        {new Date(action.created_at).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="inbox-escalated-actions">
-                    <button
-                      className="btn btn-sm btn-ghost inbox-override-btn inbox-override-approve"
-                      disabled={overriding === action.id}
-                      onClick={() => handleOverride(action.id, 'APPROVED')}
-                      title="Override: Approve"
-                    >
-                      <RiCheckLine size={14} /> Approve
-                    </button>
-                    <button
-                      className="btn btn-sm btn-ghost inbox-override-btn inbox-override-reject"
-                      disabled={overriding === action.id}
-                      onClick={() => handleOverride(action.id, 'DENIED')}
-                      title="Override: Reject"
-                    >
-                      <RiCloseLine size={14} /> Reject
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
+          ))}
+        </div>
       )}
     </div>
   )
