@@ -51,6 +51,8 @@ INSTALLED_APPS = [
     "apps.ops_core",
     # Anas Sprint 3 — project-scoped marketing loop
     "apps.marketing",
+    # Delivery — push built product to user's GitHub + deploy to Vercel
+    "apps.delivery",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",

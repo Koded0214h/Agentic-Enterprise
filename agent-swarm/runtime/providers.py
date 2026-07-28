@@ -744,29 +744,28 @@ class OllamaProvider(LLMProvider):
 # Provider registry + routing
 # ---------------------------------------------------------------------------
 
+# Platform default engine/model. Gemini 2.5 Flash is the cost/speed default for
+# the "many agents in a few minutes" product — cheap, fast, 1M-token context.
+# Override per-deploy with AOS_DEFAULT_PROVIDER / AOS_DEFAULT_MODEL.
+_DEFAULT_PROVIDER = os.environ.get("AOS_DEFAULT_PROVIDER", "gemini").strip().lower()
+_DEFAULT_MODEL = os.environ.get("AOS_DEFAULT_MODEL", "gemini-2.5-flash").strip()
+
+# Per-category overrides. Anything NOT listed here falls through to
+# _DEFAULT_ROUTING (Gemini Flash). Keep this table small — only override a
+# category when it genuinely needs a stronger/cheaper model than the default.
 _PROVIDER_ROUTING: dict[str, tuple[str, str]] = {
-    "core":         ("anthropic", "claude-sonnet-4-6"),
-    "engineering":  ("anthropic", "claude-sonnet-4-6"),
-    "research":     ("anthropic", "claude-sonnet-4-6"),
-    "academic":     ("anthropic", "claude-sonnet-4-6"),
-    "strategy":     ("anthropic", "claude-sonnet-4-6"),
-    "marketing":    ("anthropic", "claude-sonnet-4-6"),
-    "creative":     ("anthropic", "claude-sonnet-4-6"),
-    "support":      ("anthropic", "claude-haiku-4-5-20251001"),
-    "sales":        ("anthropic", "claude-sonnet-4-6"),
-    "analytics":    ("anthropic", "claude-sonnet-4-6"),
-    "local":        ("ollama",    "llama3.2"),
+    "local": ("ollama", "llama3.2"),
 }
 
-_DEFAULT_ROUTING = ("anthropic", "claude-sonnet-4-6")
+_DEFAULT_ROUTING = (_DEFAULT_PROVIDER, _DEFAULT_MODEL)
 
 # Fallback chain per provider — tried in order if primary fails
 _FALLBACK_CHAIN: dict[str, list[tuple[str, str]]] = {
-    "anthropic": [("openai", "gpt-4o"), ("gemini", "gemini-2.5-flash")],
-    "openai":    [("anthropic", "claude-sonnet-4-6"), ("mistral", "mistral-large-latest")],
-    "gemini":    [("anthropic", "claude-sonnet-4-6")],
-    "mistral":   [("anthropic", "claude-sonnet-4-6")],
-    "ollama":    [("anthropic", "claude-sonnet-4-6")],
+    "gemini":    [("anthropic", "claude-sonnet-4-6"), ("openai", "gpt-4o")],
+    "anthropic": [("gemini", "gemini-2.5-flash"), ("openai", "gpt-4o")],
+    "openai":    [("gemini", "gemini-2.5-flash"), ("anthropic", "claude-sonnet-4-6")],
+    "mistral":   [("gemini", "gemini-2.5-flash"), ("anthropic", "claude-sonnet-4-6")],
+    "ollama":    [("gemini", "gemini-2.5-flash"), ("anthropic", "claude-sonnet-4-6")],
 }
 
 

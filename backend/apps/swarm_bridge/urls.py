@@ -7,6 +7,7 @@ from .views import (
     SwarmKBQueryView,
     SwarmExecutionContextDetailView,
     ExecutionListView,
+    SwarmPreflightView,
     SwarmRunView,
     SwarmRunStreamView,
     SwarmRunPollView,
@@ -84,6 +85,7 @@ urlpatterns = [
     ),
 
     # Swarm run lifecycle
+    path("preflight/",                    SwarmPreflightView.as_view(),  name="swarm-preflight"),
     path("run/",                          SwarmRunView.as_view(),        name="swarm-run"),
     path("run/<str:run_id>/",             SwarmRunStatusView.as_view(),  name="swarm-run-status"),
     path("run/<str:run_id>/stream/",      SwarmRunStreamView.as_view(),  name="swarm-run-stream"),

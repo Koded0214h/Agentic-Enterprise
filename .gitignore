@@ -215,3 +215,6 @@ __marimo__/
 # VPS details
 id_ed25519
 id_ed25519.pub
+
+# Node dependencies (were previously committed — see docs/AUDIT.md H1)
+node_modules/

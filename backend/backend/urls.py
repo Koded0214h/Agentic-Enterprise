@@ -55,6 +55,7 @@ urlpatterns = [
     path('api/projects/', include('apps.projects.urls')),
     path('api/billing/', include('apps.billing.urls')),
     path('api/swarm/', include('apps.swarm_bridge.urls')),
+    path('api/delivery/', include('apps.delivery.urls')),
     path('api/ops/', include('apps.ops.urls')),
     path('api/marketing/', include('apps.marketing.urls')),
     path('api/v1/', include('apps.notifications.urls')),

@@ -618,11 +618,37 @@ def _pick_specialist(goal: str) -> tuple[str, str]:
     return "marketing-content-creator", "marketing"
 
 
-def _native_graph_runner(run_id: str, run: dict, goal: str, engine: str = "") -> None:
+def _deliver_run(run_id: str, goal: str, workspace, user_id: int, emit) -> None:
+    """Best-effort: publish a finished run's workspace to the user's GitHub +
+    Vercel. Never raises — delivery problems must not fail the run."""
+    try:
+        from django.contrib.auth.models import User
+        from apps.delivery.services import deliver
+
+        user = User.objects.filter(id=user_id).first()
+        if not user:
+            return
+        emit("")
+        emit("PHASE 5/5 | DELIVER")
+        emit("  Publishing build to GitHub + Vercel...")
+        record = deliver(user=user, run_id=run_id, workspace=Path(str(workspace)), goal=goal)
+        if record.repo_url:
+            emit(f"  ✓ repo: {record.repo_url}")
+        if record.live_url:
+            emit(f"  ✓ live: {record.live_url}")
+        if record.status in ("skipped", "partial", "failed") and record.detail:
+            emit(f"  [{record.status}] {record.detail}")
+    except Exception as exc:  # noqa: BLE001
+        emit(f"  [warn] delivery skipped: {exc}")
+
+
+def _native_graph_runner(run_id: str, run: dict, goal: str, engine: str = "",
+                         user_id: int | None = None) -> None:
     """
     Background thread: runs a 3-agent DAG (plan → execute → ship) using the
     native LLM runtime. Emits terminal lines into run['lines'] so the polling
-    endpoint can stream them to the frontend.
+    endpoint can stream them to the frontend. When the build produces files and
+    `user_id` is set, the workspace is delivered to the user's GitHub/Vercel.
     """
     import asyncio as _asyncio
     import sys as _sys
@@ -816,6 +842,10 @@ def _native_graph_runner(run_id: str, run: dict, goal: str, engine: str = "") ->
 
         status_word = "complete" if result["success"] else "finished with errors"
         _emit(f"[sys] run {status_word} — exit {run['exit_code']}")
+
+        # Deliver the built product to the user's GitHub + Vercel (best-effort).
+        if written and result["success"] and user_id:
+            _deliver_run(run_id, goal, workspace, user_id, _emit)
     except Exception as exc:
         import traceback as _tb
         _emit(f"[error] {exc}")
@@ -825,6 +855,103 @@ def _native_graph_runner(run_id: str, run: dict, goal: str, engine: str = "") ->
         if not run.get("done"):
             status = "completed" if run.get("exit_code") == 0 else "failed"
             _finish_run(run_id, run.get("exit_code", 1), status)
+
+
+# ---------------------------------------------------------------------------
+# Preflight — verify a run can actually succeed BEFORE we start one, so failures
+# surface as a clear message instead of an opaque error inside the run thread.
+# ---------------------------------------------------------------------------
+
+_LLM_PROVIDER_ENV = {
+    "gemini":    "GEMINI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai":    "OPENAI_API_KEY",
+    "mistral":   "MISTRAL_API_KEY",
+}
+
+_WORKSPACE_ROOT = Path("/tmp/aos-workspace")
+
+
+def _check_celery_broker() -> tuple[bool, str]:
+    """Advisory: is the Celery broker reachable? Threaded runs don't need it,
+    but post-run metering and scheduled tasks do."""
+    try:
+        from backend.celery import app as celery_app
+        conn = celery_app.connection()
+        try:
+            conn.ensure_connection(max_retries=1, timeout=2)
+        finally:
+            conn.release()
+        return True, "broker reachable"
+    except Exception as exc:  # noqa: BLE001 - report any failure verbatim
+        return False, f"broker unreachable: {exc}"
+
+
+def _preflight() -> dict:
+    """
+    Check the environment can actually run a swarm job. Returns
+    {"ok": bool, "checks": [{"name", "ok", "critical", "detail"}, ...]}.
+    `ok` is True only when every *critical* check passes.
+    """
+    checks: list[dict] = []
+
+    # 1. LLM provider key (critical) — no key, no agents.
+    available = [p for p, env in _LLM_PROVIDER_ENV.items()
+                 if os.environ.get(env, "").strip()]
+    checks.append({
+        "name": "llm_provider",
+        "ok": bool(available),
+        "critical": True,
+        "detail": (f"keys present: {', '.join(available)}" if available
+                   else "no LLM API key set (need one of "
+                        + ", ".join(_LLM_PROVIDER_ENV.values()) + ")"),
+    })
+
+    # 2. Native runtime present (critical) — the engine files must exist.
+    runtime_ok = (_SWARM_ROOT / "runtime" / "orchestration.py").is_file()
+    agents_ok = (_SWARM_ROOT / "agents").is_dir()
+    checks.append({
+        "name": "runtime",
+        "ok": runtime_ok and agents_ok,
+        "critical": True,
+        "detail": (f"runtime + agents present at {_SWARM_ROOT}"
+                   if runtime_ok and agents_ok
+                   else f"missing runtime/orchestration.py or agents/ under {_SWARM_ROOT}"),
+    })
+
+    # 3. Workspace writable (critical) — agents write files here.
+    try:
+        _WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
+        probe = _WORKSPACE_ROOT / ".preflight"
+        probe.write_text("ok")
+        probe.unlink()
+        ws_ok, ws_detail = True, f"writable: {_WORKSPACE_ROOT}"
+    except Exception as exc:  # noqa: BLE001
+        ws_ok, ws_detail = False, f"cannot write {_WORKSPACE_ROOT}: {exc}"
+    checks.append({"name": "workspace", "ok": ws_ok, "critical": True, "detail": ws_detail})
+
+    # 4. Celery broker (advisory) — doesn't block a run.
+    broker_ok, broker_detail = _check_celery_broker()
+    checks.append({"name": "celery_broker", "ok": broker_ok,
+                   "critical": False, "detail": broker_detail})
+
+    ok = all(c["ok"] for c in checks if c["critical"])
+    return {"ok": ok, "checks": checks}
+
+
+class SwarmPreflightView(APIView):
+    """
+    GET /api/swarm/preflight/
+    Report whether the environment can run a swarm job (LLM key, runtime,
+    workspace, broker). The frontend calls this before enabling "Run" so users
+    get a clear reason instead of a run that dies mid-flight.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        report = _preflight()
+        code = status.HTTP_200_OK if report["ok"] else status.HTTP_503_SERVICE_UNAVAILABLE
+        return Response(report, status=code)
 
 
 class SwarmRunView(APIView):
@@ -843,6 +970,17 @@ class SwarmRunView(APIView):
         engine = (request.data.get("engine") or "").strip()
         if not goal:
             return Response({"error": "goal is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Preflight: fail fast with a clear reason before spawning the run thread.
+        report = _preflight()
+        if not report["ok"]:
+            failed = [c for c in report["checks"] if c["critical"] and not c["ok"]]
+            return Response(
+                {"error": "preflight failed",
+                 "detail": "; ".join(f"{c['name']}: {c['detail']}" for c in failed),
+                 "checks": report["checks"]},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         try:
             guard_task_input(goal)
@@ -881,7 +1019,7 @@ class SwarmRunView(APIView):
 
         t = threading.Thread(
             target=_native_graph_runner,
-            args=(run_id, run, goal, engine),
+            args=(run_id, run, goal, engine, request.user.id),
             daemon=True,
         )
         t.start()
