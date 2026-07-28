@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api } from './client.js'
 
 function qs(params = {}) {
   const filtered = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
@@ -7,11 +7,12 @@ function qs(params = {}) {
 }
 
 export const agents = {
-  list: () => api.get('/registry/agents/'),
+  list: (params = {}) => api.get(`/registry/agents/${qs(params)}`),
   create: (data) => api.post('/registry/agents/', data),
   get: (id) => api.get(`/registry/agents/${id}/`),
   blueprints: () => api.get('/registry/blueprints/'),
   pendingActions: (params = {}) => api.get(`/intelligence/pending-actions/${qs(params)}`).then(d => Array.isArray(d) ? { results: d, count: d.length } : d),
+  pendingAction: (id) => api.get(`/intelligence/pending-actions/${id}/`),
   approve: (id, data) => api.post(`/intelligence/pending-actions/${id}/approve/`, data || { decision: 'APPROVED' }),
   reject: (id, data) => api.post(`/intelligence/pending-actions/${id}/approve/`, data || { decision: 'DENIED' }),
   escalations: () => api.get('/intelligence/escalations/'),

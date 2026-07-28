@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api } from './client.js'
 
 function qs(params = {}) {
   const filtered = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
@@ -10,7 +10,7 @@ export const ops = {
   overview: (params = {}) => {
     return api.get(`/ops/overview/${qs(params)}`)
   },
-  connectors: () => api.get('/ops/connectors/'),
+  connectors: (params = {}) => api.get(`/ops/connectors/${qs(params)}`),
   accounts: {
     list: (params = {}) => api.get(`/ops/accounts/${qs(params)}`),
     create: (data) => api.post('/ops/accounts/', data),
@@ -39,6 +39,6 @@ export const ops = {
   queue: {
     list: (params = {}) => api.get(`/ops/queue/${qs(params)}`),
     process: (limit = 25, params = {}) => api.post('/ops/queue/process/', { limit, ...params }),
-    retry: (id) => api.post(`/ops/queue/${id}/retry/`),
+    retry: (id, params = {}) => api.post(`/ops/queue/${id}/retry/`, params),
   },
 }

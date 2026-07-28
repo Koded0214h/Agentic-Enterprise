@@ -1,5 +1,5 @@
 const DEFAULT_API_URL = "https://aos-api.viewdns.net/api";
-const BASE = (import.meta.env.VITE_API_URL || DEFAULT_API_URL).replace(
+const BASE = (import.meta.env?.VITE_API_URL || DEFAULT_API_URL).replace(
   /\/+$/,
   "",
 );

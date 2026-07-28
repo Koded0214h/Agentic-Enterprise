@@ -70,10 +70,13 @@ export default function AppShell() {
     const params = new URLSearchParams(location.search)
     const prompt = params.get('prompt')
     if (prompt && location.pathname === '/app/swarm') {
-      setSwarmInitialGoal(decodeURIComponent(prompt))
-      setSwarmProjectId(params.get('project_id') || '')
-      setSwarmOpen(true)
-      navigate('/app', { replace: true })
+      const timer = window.setTimeout(() => {
+        setSwarmInitialGoal(decodeURIComponent(prompt))
+        setSwarmProjectId(params.get('project_id') || '')
+        setSwarmOpen(true)
+        navigate('/app', { replace: true })
+      }, 0)
+      return () => window.clearTimeout(timer)
     }
   }, [location.search, location.pathname, navigate])
 

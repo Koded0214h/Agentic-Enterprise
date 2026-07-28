@@ -9,12 +9,18 @@ import {
   RiCloseLine,
   RiCpuLine,
   RiFlagLine,
+  RiLinksLine,
   RiLoader4Line,
+  RiPauseCircleLine,
+  RiPlayCircleLine,
+  RiRefreshLine,
   RiMoneyDollarCircleLine,
   RiRocketLine,
   RiRobot2Line,
   RiSettings3Line,
   RiShieldCheckLine,
+  RiStackLine,
+  RiUserSettingsLine,
   RiTimeLine,
 } from "react-icons/ri";
 import { projects as projectsAPI } from "../../api/projects";
@@ -23,6 +29,7 @@ import { ops } from "../../api/ops";
 import { finance } from "../../api/finance";
 import { agents as agentsAPI } from "../../api/agents";
 import { observe } from "../../api/observe";
+import { useProjectControls } from "../../hooks/useProjectControls";
 import "./Projects.css";
 
 const EMPTY_LIST = [];
@@ -39,8 +46,11 @@ export default function ProjectDetail() {
   const [workflowTasks, setWorkflowTasks] = useState([]);
   const [pendingActions, setPendingActions] = useState([]);
   const [connectors, setConnectors] = useState(null);
+  const [serverReadiness, setServerReadiness] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [interventionOpen, setInterventionOpen] = useState(false);
+  const [intervention, setIntervention] = useState({ action: "", reason: "" });
 
   useEffect(() => {
     loadProject();
@@ -55,24 +65,23 @@ export default function ProjectDetail() {
         projectData,
         opsData,
         financeData,
-        agentData,
         runData,
         taskData,
         pendingData,
         connectorData,
+        readinessData,
       ] = await Promise.all([
         projectsAPI.overview(id),
         ops.overview({ project_id: id }),
         finance.summary({ project_id: id }),
-        agentsAPI.list(),
         observe.recentRuns({ project_id: id }).catch(() => ({ results: [] })),
         observe.tasks({ project_id: id }).catch(() => ({ results: [] })),
         agentsAPI
           .pendingActions({ project_id: id })
           .catch(() => ({ results: [] })),
-        ops.connectors().catch(() => null),
+        ops.connectors({ project_id: id }).catch(() => null),
+        projectsAPI.readiness(id).catch(() => null),
       ]);
-      const agents = unpackList(agentData);
       setDetail(projectData);
       setOpsSummary(opsData);
       setFinanceSummary(financeData);
@@ -80,9 +89,10 @@ export default function ProjectDetail() {
       setWorkflowTasks(unpackList(taskData));
       setPendingActions(unpackList(pendingData));
       setConnectors(connectorData);
+      setServerReadiness(readinessData);
       setAgentsSummary({
-        total: agents.length,
-        running: agents.filter((agent) => agent.status === "RUNNING").length,
+        total: readinessData?.summary?.agents ?? 0,
+        running: readinessData?.summary?.workflows_run ? readinessData?.summary?.agents ?? 0 : 0,
       });
     } catch (err) {
       setError(err?.data?.detail || err.message || "Failed to load project");
@@ -99,6 +109,11 @@ export default function ProjectDetail() {
   const opsCounts = opsSummary?.counts || EMPTY_OBJECT;
   const financeUsage = financeSummary?.usage_summary || {};
   const financeBudget = financeSummary?.budget_summary || EMPTY_OBJECT;
+  const queueItems = opsSummary?.recent?.queue || EMPTY_LIST;
+  const failedQueue = queueItems.filter((item) => String(item.status).toUpperCase() === "FAILED");
+  const connectorRows = projectConnectorList(serverReadiness, connectors);
+  const isPaused = Boolean(project?.status === "PAUSED" || project?.automation_paused || project?.automation_status === "PAUSED");
+  const pendingApprovals = pendingActions.filter((action) => !action.status || ["PENDING", "ESCALATED"].includes(String(action.status).toUpperCase()));
   const timelineItems = useMemo(
     () =>
       buildTimeline({
@@ -140,6 +155,20 @@ export default function ProjectDetail() {
       timelineItems,
     ],
   );
+  const controls = useProjectControls(id, loadProject);
+
+  function toggleAutomation() {
+    controls.setAutomationPaused(!isPaused);
+  }
+
+  async function submitIntervention(event) {
+    event.preventDefault();
+    const result = await controls.intervene(intervention, { runs, failedQueue });
+    if (result.ok) {
+      setInterventionOpen(false);
+      setIntervention({ action: "", reason: "" });
+    }
+  }
 
   if (loading) {
     return (
@@ -192,6 +221,9 @@ export default function ProjectDetail() {
           </p>
         </div>
         <div className="projects-hero-side">
+          <span className={`badge badge-${isPaused ? "amber" : "green"}`}>
+            Automation {isPaused ? "paused" : "running"}
+          </span>
           <div className="projects-budget">
             <span>Monthly budget</span>
             <strong>
@@ -200,6 +232,28 @@ export default function ProjectDetail() {
           </div>
         </div>
       </div>
+
+      <section className="card command-controls" aria-label="Autonomy controls">
+        <div className="command-controls-copy">
+          <strong>Autonomy controls</strong>
+          <span>Steer this project without changing its lifecycle state.</span>
+        </div>
+        <div className="command-controls-actions">
+          <button className={`btn ${isPaused ? "btn-primary" : "btn-ghost"}`} onClick={toggleAutomation} disabled={Boolean(controls.busy)}>
+            {isPaused ? <RiPlayCircleLine size={16} /> : <RiPauseCircleLine size={16} />}
+            {controls.busy === "automation" ? "Updating…" : isPaused ? "Resume automation" : "Pause automation"}
+          </button>
+          <button className="btn btn-ghost" onClick={() => setInterventionOpen(true)} disabled={Boolean(controls.busy)}>
+            <RiUserSettingsLine size={16} /> Manual intervention
+          </button>
+          <button className="btn btn-ghost" onClick={() => controls.recoverQueue(failedQueue)} disabled={Boolean(controls.busy) || !failedQueue.length}>
+            <RiRefreshLine size={15} /> {controls.busy === "recovery" ? "Recovering…" : "Recover queue failures"}
+          </button>
+        </div>
+      </section>
+
+      {controls.error && <div className="projects-error command-feedback">{controls.error}</div>}
+      {controls.message && <div className="command-success command-feedback">{controls.message}</div>}
 
       <GettingStarted
         id={id}
@@ -258,6 +312,56 @@ export default function ProjectDetail() {
               sub={`${opsCounts.queue_due_now ?? 0} due now`}
             />
           </div>
+
+          <div className="command-center-grid">
+            <CommandPanel title="Workstreams" icon={<RiBriefcaseLine size={16} />} badge={`${workflowTasks.length + runs.length} active records`}>
+              <CommandMetric label="Goals in progress" value={goals.filter((goal) => goal.status === "IN_PROGRESS").length} />
+              <CommandMetric label="Workflow tasks" value={workflowTasks.length} />
+              <CommandMetric label="Runs" value={runs.length} />
+              <CommandMetric label="Running now" value={runs.filter((run) => String(run.status).toLowerCase() === "running").length} tone="green" />
+            </CommandPanel>
+            <CommandPanel title="Queue" icon={<RiStackLine size={16} />} badge={`${opsCounts.queue_pending ?? 0} pending`}>
+              <CommandMetric label="Due now" value={opsCounts.queue_due_now ?? 0} tone={(opsCounts.queue_due_now ?? 0) ? "amber" : "green"} />
+              <CommandMetric label="Failed" value={opsCounts.queue_failed ?? 0} tone={(opsCounts.queue_failed ?? 0) ? "red" : "green"} />
+              {failedQueue.slice(0, 2).map((item) => (
+                <button key={item.id} className="command-row-action" disabled={Boolean(controls.busy)} onClick={() => controls.retryQueueItem(item.id)}>
+                  <span>{queueSubject(item)}</span><span>{controls.busy === `queue-${item.id}` ? "Retrying…" : "Retry"}</span>
+                </button>
+              ))}
+            </CommandPanel>
+            <CommandPanel title="Budget" icon={<RiMoneyDollarCircleLine size={16} />} badge={`${financeBudget.percent_used ?? 0}% used`}>
+              <CommandMetric label="Current spend" value={`${project.currency} ${Number(financeBudget.current_spend || 0).toFixed(2)}`} />
+              <CommandMetric label="Monthly limit" value={`${project.currency} ${project.monthly_budget}`} />
+              <div className="command-progress"><span style={{ width: `${Math.min(Number(financeBudget.percent_used || 0), 100)}%` }} /></div>
+              <span className={`command-health command-health-${financeBudget.over_limit ? "red" : financeBudget.over_alert ? "amber" : "green"}`}>
+                {financeBudget.over_limit ? "Limit exceeded" : financeBudget.over_alert ? "Approaching limit" : "Within budget"}
+              </span>
+            </CommandPanel>
+            <CommandPanel title="Connectors" icon={<RiLinksLine size={16} />} badge={`${connectorRows.filter((row) => connectorHealthy(row)).length}/${connectorRows.length} healthy`}>
+              {connectorRows.length ? connectorRows.map((connector) => (
+                <div className="command-connector" key={connector.name}>
+                  <span>{sentence(connector.name)}</span>
+                  <span className={`command-health command-health-${connectorHealthy(connector) ? "green" : "red"}`}>{sentence(connector.status)}</span>
+                </div>
+              )) : <div className="projects-empty">No connector health reported.</div>}
+            </CommandPanel>
+          </div>
+
+          <section className="card command-approvals">
+            <div className="projects-panel-head">
+              <span>Approval inbox · {project.name}</span>
+              <span className={`badge badge-${pendingApprovals.length ? "amber" : "green"}`}>{pendingApprovals.length} pending</span>
+            </div>
+            {pendingApprovals.length ? pendingApprovals.slice(0, 5).map((action) => (
+              <div className="command-approval-row" key={action.id}>
+                <div><strong>{action.action || action.action_type || "Agent action"}</strong><small>{action.agent_name || action.agent || action.reason || "Operator decision required"}</small></div>
+                <div>
+                  <button className="btn btn-ghost btn-sm" disabled={Boolean(controls.busy)} onClick={() => controls.decideApproval(action.id, "DENIED")}>Reject</button>
+                  <button className="btn btn-primary btn-sm" disabled={Boolean(controls.busy)} onClick={() => controls.decideApproval(action.id, "APPROVED")}>{controls.busy === `approval-${action.id}` ? "Saving…" : "Approve"}</button>
+                </div>
+              </div>
+            )) : <div className="projects-empty">No project approvals need attention.</div>}
+          </section>
 
           <div className="projects-detail-grid">
             <section className="card projects-panel projects-readiness-panel">
@@ -406,8 +510,27 @@ export default function ProjectDetail() {
       {tab === "goals" && (
         <GoalsTab projectId={id} goals={goals} onRefresh={loadProject} />
       )}
+
+      {interventionOpen && (
+        <div className="projects-modal-backdrop" role="presentation" onMouseDown={() => setInterventionOpen(false)}>
+          <form className="projects-modal card intervention-modal" onSubmit={submitIntervention} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="projects-modal-head"><div><span className="badge badge-amber">Operator action</span><h2>Manual intervention</h2><p>Record an explicit instruction in the project control plane.</p></div><button type="button" className="projects-modal-close" onClick={() => setInterventionOpen(false)} aria-label="Close intervention modal"><RiCloseLine size={18} /></button></div>
+            <label className="projects-field"><span>Action</span><select className="projects-input" value={intervention.action} onChange={(event) => setIntervention((value) => ({ ...value, action: event.target.value }))} required><option value="">Select an action</option><option value="STOP_CURRENT_RUNS">Stop current runs</option><option value="RECOVER_FAILED_QUEUE">Retry failed queue items</option><option value="ESCALATE_TO_OPERATOR">Take over execution</option><option value="REPLAN_PROJECT">Request replanning</option></select></label>
+            <label className="projects-field"><span>Reason</span><textarea className="projects-input" rows="4" value={intervention.reason} onChange={(event) => setIntervention((value) => ({ ...value, reason: event.target.value }))} required /></label>
+            <div className="projects-modal-actions"><button type="button" className="btn btn-ghost" onClick={() => setInterventionOpen(false)}>Cancel</button><button className="btn btn-primary" disabled={controls.busy === "intervention" || !intervention.action || !intervention.reason.trim()}>{controls.busy === "intervention" ? "Submitting…" : "Submit intervention"}</button></div>
+          </form>
+        </div>
+      )}
     </div>
   );
+}
+
+function CommandPanel({ title, icon, badge, children }) {
+  return <section className="card command-panel"><div className="command-panel-head"><span>{icon}{title}</span><small>{badge}</small></div><div className="command-panel-body">{children}</div></section>;
+}
+
+function CommandMetric({ label, value, tone = "default" }) {
+  return <div className="command-metric"><span>{label}</span><strong className={`command-value-${tone}`}>{value}</strong></div>;
 }
 
 // ─── Runs tab ─────────────────────────────────────────────────────────────────
@@ -1063,10 +1186,25 @@ function connectorList(data) {
     return {
       name,
       status: String(
-        value?.status || value?.state || value?.configured || "missing",
+        value?.status || value?.state || (value?.available ? "available" : value?.configured ? "configured" : "missing"),
       ).toLowerCase(),
     };
   });
+}
+
+function projectConnectorList(readiness, fallbackData) {
+  if (!readiness?.summary) return connectorList(fallbackData);
+  const rows = [
+    { name: "CRM", status: readiness.summary.crm_connected ? "connected" : "missing" },
+    { name: "Support", status: readiness.summary.support_connected ? "connected" : "missing" },
+  ];
+  const fallback = connectorList(fallbackData).find((item) => item.name === "bridge");
+  if (fallback) rows.push({ ...fallback, name: "Fallback bridge" });
+  return rows;
+}
+
+function connectorHealthy(connector) {
+  return ["connected", "healthy", "available", "configured", "true"].includes(connector.status);
 }
 
 function belongsToProject(item, projectId) {
